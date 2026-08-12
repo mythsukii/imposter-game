@@ -561,13 +561,13 @@ const WORD_PAIRS = [
   // Essen & Getränke
   ["Apfel","Birne"], ["Erdbeere","Himbeere"], ["Zitrone","Limette"], ["Milch","Buttermilch"],
   ["Käse","Quark"], ["Butter","Margarine"], ["Brot","Brötchen"], ["Nudeln","Reis"],
-  ["Suppe","Eintopf"], ["Salat","Rohkost"], ["Wurst","Schinken"], ["Ei","Omelett"],
+  ["Suppe","Eintopf"], ["Salat","Rohkost"], ["Wurst","Schinken"], ["Rührei","Omelett"],
   ["Honig","Marmelade"], ["Zucker","Süßstoff"], ["Salz","Pfeffer"], ["Ketchup","Senf"],
   ["Döner","Kebab"], ["Sushi","Sashimi"], ["Tacos","Burritos"], ["Lasagne","Cannelloni"],
   ["Gulasch","Ragout"], ["Schnitzel","Kotelett"], ["Espresso","Cappuccino"], ["Wasser","Mineralwasser"],
   ["Saft","Smoothie"], ["Sekt","Champagner"], ["Cocktail","Longdrink"], ["Popcorn","Chips"],
   ["Eis","Sorbet"], ["Torte","Kuchen"], ["Pudding","Vanillecreme"], ["Müsli","Granola"],
-  ["Waffel","Pfannkuchen"], ["Gemüse","Obst"],
+  ["Waffel","Pfannkuchen"], ["Karotte","Gurke"],
   // Tiere
   ["Löwe","Tiger"], ["Wolf","Fuchs"], ["Adler","Falke"], ["Delfin","Wal"],
   ["Hai","Barrakuda"], ["Pinguin","Robbe"], ["Affe","Gorilla"], ["Zebra","Pferd"],
@@ -575,7 +575,7 @@ const WORD_PAIRS = [
   ["Schmetterling","Motte"], ["Spinne","Skorpion"], ["Maus","Ratte"], ["Hase","Kaninchen"],
   ["Schaf","Ziege"], ["Kuh","Bulle"], ["Schwein","Wildschwein"], ["Ente","Gans"],
   ["Huhn","Pute"], ["Papagei","Kakadu"], ["Eule","Kauz"], ["Krokodil","Alligator"],
-  ["Schildkröte","Salamander"],
+  ["Schildkröte","Leguan"],
   // Berufe
   ["Polizist","Feuerwehrmann"], ["Pilot","Fluglotse"], ["Koch","Bäcker"], ["Anwalt","Richter"],
   ["Ingenieur","Techniker"], ["Architekt","Bauingenieur"], ["Journalist","Blogger"], ["Fotograf","Kameramann"],
@@ -596,30 +596,30 @@ const WORD_PAIRS = [
   ["Puzzle","Kreuzworträtsel"], ["Malen","Zeichnen"], ["Fotografieren","Filmen"], ["Tanzen","Ballett"],
   // Technik & Medien
   ["Laptop","Computer"], ["Kamera","Camcorder"], ["Kopfhörer","Lautsprecher"], ["Drucker","Scanner"],
-  ["Fernseher","Beamer"], ["Internet","WLAN"], ["App","Programm"], ["Roboter","Drohne"],
+  ["Fernseher","Beamer"], ["WLAN","Bluetooth"], ["App","Programm"], ["Roboter","Drohne"],
   ["Batterie","Akku"], ["Router","Modem"], ["Podcast","Hörbuch"], ["Zeitung","Zeitschrift"],
   ["Comic","Manga"], ["Serie","Film"], ["Netflix","YouTube"], ["Instagram","TikTok"],
-  ["E-Mail","Brief"], ["Passwort","PIN"],
+  ["E-Mail","SMS"], ["Passwort","PIN"],
   // Natur & Wetter
   ["Sonne","Mond"], ["Stern","Planet"], ["Blitz","Donner"], ["Nebel","Wolke"],
-  ["Sturm","Orkan"], ["Hitze","Kälte"], ["Frost","Eis"], ["Vulkan","Erdbeben"],
+  ["Sturm","Orkan"], ["Hitze","Schwüle"], ["Frost","Eis"], ["Erdbeben","Tsunami"],
   ["Fluss","Bach"], ["Wasserfall","Quelle"], ["Wüste","Savanne"], ["Wiese","Feld"],
-  ["Baum","Strauch"], ["Blume","Pflanze"], ["Pilz","Moos"],
+  ["Baum","Strauch"], ["Rose","Tulpe"], ["Pilz","Moos"],
   // Fahrzeuge
-  ["Fahrrad","Roller"], ["Lastwagen","Transporter"], ["Boot","Schiff"], ["U-Boot","Fähre"],
-  ["Rakete","Satellit"], ["Traktor","Bagger"], ["Straßenbahn","U-Bahn"], ["Wohnmobil","Wohnwagen"],
+  ["Fahrrad","Roller"], ["Lastwagen","Transporter"], ["Boot","Schiff"], ["Segelboot","Motorboot"],
+  ["Rakete","Raumschiff"], ["Traktor","Bagger"], ["Straßenbahn","U-Bahn"], ["Wohnmobil","Wohnwagen"],
   ["Kutsche","Pferdewagen"],
   // Feiertage & Events
-  ["Weihnachten","Silvester"], ["Ostern","Erntedank"], ["Geburtstag","Jubiläum"], ["Hochzeit","Verlobung"],
+  ["Weihnachten","Silvester"], ["Ostern","Pfingsten"], ["Geburtstag","Jubiläum"], ["Hochzeit","Verlobung"],
   ["Karneval","Halloween"], ["Konzert","Festival"], ["Zirkus","Jahrmarkt"], ["Messe","Ausstellung"],
   ["Turnier","Meisterschaft"],
   // Alltag & Gegenstände
   ["Regenschirm","Poncho"], ["Rucksack","Koffer"], ["Brille","Sonnenbrille"], ["Uhr","Wecker"],
   ["Schlüssel","Chipkarte"], ["Kerze","Taschenlampe"], ["Spiegel","Fenster"], ["Teppich","Vorhang"],
-  ["Sofa","Sessel"], ["Bett","Couch"], ["Dusche","Badewanne"], ["Zahnbürste","Zahnpasta"],
-  ["Seife","Shampoo"], ["Besen","Staubsauger"], ["Schere","Messer"],
+  ["Sofa","Sessel"], ["Bett","Couch"], ["Dusche","Badewanne"],
+  ["Zahnbürste","Munddusche"], ["Seife","Shampoo"], ["Besen","Staubsauger"], ["Schere","Messer"],
   // Mode
-  ["Jeans","Chino"], ["Pullover","Sweatshirt"], ["Jacke","Mantel"], ["Schuhe","Sneaker"],
+  ["Jeans","Chino"], ["Pullover","Sweatshirt"], ["Jacke","Mantel"], ["Loafer","Sneaker"],
   ["Stiefel","Sandalen"], ["Mütze","Schal"], ["Handschuhe","Fäustlinge"], ["Krawatte","Fliege"],
   ["Anzug","Smoking"], ["Kleid","Rock"]
 ];
@@ -630,9 +630,9 @@ const SPICY_WORD_PAIRS = [
   ["Flirt","Anmache"], ["Erstes Date","Blind Date"], ["One-Night-Stand","Affäre"],
   ["Seitensprung","Techtelmechtel"], ["Tinder","Grindr"], ["Stripclub","Table Dance"],
   ["Kuss","Zungenkuss"], ["Dessous","Bikini"], ["Sexy","Verführerisch"],
-  ["Quickie","Kuscheln"], ["Bettgeschichte","Liebesnacht"], ["Kondom","Pille"],
-  ["Pornhub","OnlyFans"], ["Poledance","Lapdance"], ["Junggesellenabschied","Manöverkritik"],
-  ["Sexting","Nacktfoto"], ["Fetisch","Vorliebe"], ["Liebeskummer","Trennungssex"],
+  ["Quickie","Nummer"], ["Bettgeschichte","Liebesnacht"], ["Kondom","Pille"],
+  ["Pornhub","OnlyFans"], ["Poledance","Lapdance"], ["Junggesellenabschied","Polterabend"],
+  ["Sexting","Nacktfoto"], ["Fetisch","Vorliebe"], ["Liebeskummer","Herzschmerz"],
   ["Callgirl","Escort"], ["Swinger-Club","Dreier"],
   ["Verführung","Verlockung"], ["Vorspiel","Nachspiel"], ["Bettgeflüster","Kuschelabend"],
   ["Erotikmassage","Wellnessmassage"], ["Liebesbrief","Sexnachricht"], ["Fremdgehen","Heimlichtuerei"],
