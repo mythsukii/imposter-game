@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121016">
+<title>Wer ist der Imposter?</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%95%B5%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #121016;
+    --bg-2: #1A1620;
+    --surface: #1E1B26;
+    --surface-2: #262230;
+    --border: rgba(255,255,255,0.08);
+    --text: #F4F2F8;
+    --text-dim: #9C96AA;
+    --accent: #7C5CFC;
+    --accent-2: #9B7CFF;
+    --accent-contrast: #0E0C14;
+    --danger: #FF5A6E;
+    --ok: #3DDC97;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{ height: 100%; }
+  body{
+    margin: 0;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% -10%, rgba(124,92,252,0.20), transparent 55%),
+      radial-gradient(circle at 90% 110%, rgba(124,92,252,0.12), transparent 50%);
+    background-attachment: fixed;
+    color: var(--text);
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app{
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  }
+  .screen{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    animation: fadeIn .35s ease both;
+  }
+  @keyframes fadeIn{ from{ opacity:0; transform: translateY(6px); } to{ opacity:1; transform: translateY(0); } }
+  @keyframes scaleIn{ from{ opacity:0; transform: scale(.9); } to{ opacity:1; transform: scale(1); } }
+
+  h1,h2,h3,p{ margin: 0; }
+  .brand{
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .brand strong{ color: var(--text); }
+
+  .spacer{ flex: 1; }
+  .center-col{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 28px;
+  }
+
+  label{
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  input[type="text"]{
+    width: 100%;
+    font-family: inherit;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    outline: none;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  input[type="text"]:focus{ border-color: var(--accent); background: var(--surface-2); }
+  input[type="text"]::placeholder{ color: var(--text-dim); font-weight: 500; }
+  .code-input{
+    text-align: center;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    font-size: 1.6rem;
+  }
+
+  button{
+    font-family: inherit;
+    border: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .btn{
+    display: block;
+    width: 100%;
+    padding: 18px 20px;
+    border-radius: 16px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+    transition: transform .12s ease, opacity .12s ease, filter .12s ease;
+  }
+  .btn:active{ transform: scale(0.97); }
+  .btn:disabled{ opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-primary{
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    box-shadow: 0 10px 30px -10px rgba(124,92,252,0.55);
+  }
+  .btn-primary:active:not(:disabled){ filter: brightness(0.95); }
+  .btn-secondary{
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost{
+    background: transparent;
+    color: var(--text-dim);
+    font-weight: 600;
+    padding: 12px;
+    font-size: 0.95rem;
+  }
+  .btn-danger{
+    background: rgba(255,90,110,0.12);
+    color: var(--danger);
+    border: 1px solid rgba(255,90,110,0.3);
+  }
+  .btn-row{ display: flex; flex-direction: column; gap: 12px; }
+
+  .error-text{
+    color: var(--danger);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  .card{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+  }
+
+  /* Waiting room */
+  .code-display{
+    text-align: center;
+    padding: 28px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+  }
+  .code-display .label{ font-size: 0.8rem; color: var(--text-dim); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+  .code-display .code{
+    font-size: clamp(2.4rem, 14vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--text);
+  }
+  .copy-btn{
+    margin-top: 14px;
+    display: inline-block;
+    width: auto;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+  }
+
+  .player-list{
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .player-list li{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-weight: 600;
+  }
+  .tag{
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    background: rgba(124,92,252,0.14);
+    padding: 4px 8px;
+    border-radius: 999px;
+  }
+  .section-title{
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 22px 0 10px;
+  }
+  .hint-text{
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-top: 12px;
+  }
+
+  /* Word screen */
+  .word-stage{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 14px;
+  }
+  .word-eyebrow{
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .word-eyebrow.imposter{ color: var(--danger); }
+  .the-word{
+    font-size: clamp(2.6rem, 13vw, 4.6rem);
+    font-weight: 700;
+    line-height: 1.05;
+    word-break: break-word;
+  }
+  .imposter-note{
+    max-width: 320px;
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-top: 6px;
+  }
+
+  /* Discussion */
+  .timer{
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .vote-btn{
+    width: 100%;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .vote-btn.voted{
+    border-color: var(--accent);
+    background: rgba(124,92,252,0.12);
+  }
+  .vote-check{ color: var(--accent-2); font-weight: 700; opacity: 0; }
+  .vote-btn.voted .vote-check{ opacity: 1; }
+
+  /* Reveal */
+  .reveal-stage{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+  }
+  .reveal-eyebrow{
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--danger);
+    animation: scaleIn .4s ease both;
+  }
+  .reveal-name{
+    font-size: clamp(2.2rem, 11vw, 3.6rem);
+    font-weight: 700;
+    animation: scaleIn .45s ease both;
+    animation-delay: .05s;
+  }
+  .reveal-words{
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    animation: fadeIn .5s ease both;
+    animation-delay: .15s;
+  }
+  .reveal-word-row{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .reveal-word-row .k{ color: var(--text-dim); font-size: 0.85rem; font-weight: 600; }
+  .reveal-word-row .v{ font-weight: 700; font-size: 1.05rem; }
+
+  .tally-row{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .tally-row:last-child{ border-bottom: none; }
+  .tally-row.is-imposter{ color: var(--text); }
+  .tally-summary{
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .loading-stage{
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  #toast{
+    position: fixed;
+    left: 50%;
+    bottom: max(24px, env(safe-area-inset-bottom));
+    transform: translate(-50%, 20px);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 12px 20px;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 50;
+    max-width: 90vw;
+    text-align: center;
+  }
+  #toast.show{
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  @supports not (backdrop-filter: blur(1px)){
+    .card, .surface{ background: var(--surface); }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import {
+  getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot,
+  serverTimestamp, deleteField, increment
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAt8U0wN0VAd7WYsedOYTfX7xh0O7EW5vY",
+  authDomain: "impostergame-tb.firebaseapp.com",
+  projectId: "impostergame-tb",
+  storageBucket: "impostergame-tb.firebasestorage.app",
+  messagingSenderId: "72519164314",
+  appId: "1:72519164314:web:3f7f60f3fbca074b55da23"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+const lobbyRef = (code) => doc(db, "lobbies", code);
+const secretRef = (code, uid) => doc(db, "lobbies", code, "secrets", uid);
+
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no O, I, 0, 1
+const MAX_PLAYERS = 12;
+const MIN_PLAYERS = 3;
+
+const WORD_PAIRS = [
+  ["Kaffee","Tee"], ["Hund","Katze"], ["Meer","See"], ["Pizza","Pasta"],
+  ["Sommer","Frühling"], ["Fußball","Handball"], ["Auto","Motorrad"], ["Berg","Hügel"],
+  ["Regen","Schnee"], ["Bier","Wein"], ["Handy","Tablet"], ["Lehrer","Erzieher"],
+  ["Arzt","Krankenpfleger"], ["Flugzeug","Hubschrauber"], ["Wald","Park"], ["Frühstück","Brunch"],
+  ["Kino","Theater"], ["Gitarre","Ukulele"], ["Schokolade","Karamell"], ["Zug","Bus"],
+  ["Insel","Halbinsel"], ["Winter","Herbst"], ["Burger","Sandwich"], ["Katze","Tiger"],
+  ["Elefant","Nashorn"], ["Strand","Wüste"], ["Bibliothek","Buchladen"], ["Currywurst","Bratwurst"],
+  ["Zahnarzt","Kieferorthopäde"], ["Yoga","Pilates"], ["Schach","Dame"], ["Camping","Wandern"],
+  ["Limonade","Cola"], ["Frisör","Barbier"], ["Supermarkt","Kiosk"],
+  ["Basketball","Volleyball"], ["Ananas","Mango"], ["Whiskey","Rum"], ["Roman","Novelle"],
+  ["Tennis","Badminton"], ["Keks","Kuchen"], ["Taxi","Rikscha"], ["Segeln","Rudern"]
+];
+
+function esc(str){
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
+function generateCode(){
+  let out = "";
+  for (let i = 0; i < 4; i++){
+    out += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  }
+  return out;
+}
+
+let toastTimer = null;
+function showToast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+const app = {
+  uid: null,
+  name: "",
+  code: null,
+  isHost: false,
+  lobbyData: null,
+  secretData: null,
+  localPhase: "word", // 'word' | 'discussion'
+  lastSeenRound: -1,
+  unsubLobby: null,
+  unsubSecret: null,
+  screen: "loading", // 'loading' | 'start' | 'in-lobby'
+  startMode: "menu", // 'menu' | 'join'
+  currentRoundSecret: null
+};
+
+let discussionTimerHandle = null;
+let discussionTimerStart = null;
+function stopDiscussionTimer(){
+  if (discussionTimerHandle){
+    clearInterval(discussionTimerHandle);
+    discussionTimerHandle = null;
+    discussionTimerStart = null;
+  }
+}
+function ensureDiscussionTimer(){
+  if (discussionTimerHandle) return;
+  discussionTimerStart = Date.now();
+  discussionTimerHandle = setInterval(() => {
+    const el = document.getElementById("timer-display");
+    if (!el) return;
+    const elapsed = Math.floor((Date.now() - discussionTimerStart) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const s = String(elapsed % 60).padStart(2, "0");
+    el.textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+// ---------- Auth ----------
+onAuthStateChanged(auth, (user) => {
+  if (user){
+    app.uid = user.uid;
+    app.name = localStorage.getItem("imposter_name") || "";
+    app.screen = "start";
+    render();
+  }
+});
+signInAnonymously(auth).catch((e) => {
+  console.error(e);
+  showToast("Anmeldung fehlgeschlagen. Lade die Seite neu.");
+});
+
+// ---------- Actions ----------
+async function createLobby(btn){
+  const nameInput = document.getElementById("name-input");
+  const name = (nameInput.value || "").trim();
+  if (!name){ setStartError("Bitte gib deinen Namen ein."); return; }
+  if (!app.uid){ setStartError("Noch nicht bereit, versuch's gleich nochmal."); return; }
+  localStorage.setItem("imposter_name", name);
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Erstelle Lobby …";
+  try {
+    let code = null;
+    for (let attempt = 0; attempt < 6; attempt++){
+      const candidate = generateCode();
+      const existing = await getDoc(lobbyRef(candidate));
+      if (!existing.exists()){ code = candidate; break; }
+    }
+    if (!code){ throw new Error("no-code"); }
+    await setDoc(lobbyRef(code), {
+      hostUid: app.uid,
+      status: "lobby",
+      players: { [app.uid]: { name, joinedAt: Date.now() } },
+      round: 0,
+      createdAt: serverTimestamp()
+    });
+    enterLobby(code);
+  } catch (e){
+    console.error(e);
+    setStartError("Lobby konnte nicht erstellt werden. Versuch's nochmal.");
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+async function joinLobby(btn){
+  const nameInput = document.getElementById("name-input");
+  const codeInput = document.getElementById("code-input");
+  const name = (nameInput.value || "").trim();
+  const code = (codeInput.value || "").trim().toUpperCase();
+  if (!name){ setStartError("Bitte gib deinen Namen ein."); return; }
+  if (code.length !== 4){ setStartError("Der Code hat 4 Zeichen."); return; }
+  if (!app.uid){ setStartError("Noch nicht bereit, versuch's gleich nochmal."); return; }
+  localStorage.setItem("imposter_name", name);
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Trete bei …";
+  try {
+    const snap = await getDoc(lobbyRef(code));
+    if (!snap.exists()){ setStartError("Diese Lobby gibt es nicht."); btn.disabled = false; btn.textContent = originalText; return; }
+    const data = snap.data();
+    if (data.status !== "lobby"){ setStartError("Diese Runde läuft schon."); btn.disabled = false; btn.textContent = originalText; return; }
+    const count = Object.keys(data.players || {}).length;
+    if (count >= MAX_PLAYERS){ setStartError("Die Lobby ist voll."); btn.disabled = false; btn.textContent = originalText; return; }
+    await updateDoc(lobbyRef(code), { [`players.${app.uid}`]: { name, joinedAt: Date.now() } });
+    enterLobby(code);
+  } catch (e){
+    console.error(e);
+    setStartError("Beitreten hat nicht geklappt. Versuch's nochmal.");
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+function enterLobby(code){
+  app.code = code;
+  app.screen = "in-lobby";
+  app.lastSeenRound = -1;
+  app.localPhase = "word";
+  app.currentRoundSecret = null;
+  subscribeLobby(code);
+  subscribeSecret(code, app.uid);
+}
+
+function subscribeLobby(code){
+  if (app.unsubLobby) app.unsubLobby();
+  app.unsubLobby = onSnapshot(lobbyRef(code), (snap) => {
+    if (!snap.exists()){ return; }
+    const data = snap.data();
+    app.lobbyData = data;
+    app.isHost = data.hostUid === app.uid;
+    if (data.status === "playing" && data.round !== app.lastSeenRound){
+      app.localPhase = "word";
+      app.lastSeenRound = data.round;
+    }
+    render();
+  }, (err) => { console.error(err); });
+}
+
+function subscribeSecret(code, uid){
+  if (app.unsubSecret) app.unsubSecret();
+  app.unsubSecret = onSnapshot(secretRef(code, uid), (snap) => {
+    app.secretData = snap.exists() ? snap.data() : null;
+    render();
+  }, (err) => { console.error(err); });
+}
+
+function goToDiscussion(){
+  app.localPhase = "discussion";
+  render();
+}
+
+async function startRound(btn){
+  if (!app.isHost || !app.lobbyData) return;
+  const players = Object.keys(app.lobbyData.players || {});
+  if (players.length < MIN_PLAYERS) return;
+  if (btn){ btn.disabled = true; btn.textContent = "Starte Runde …"; }
+  try {
+    const pair = WORD_PAIRS[Math.floor(Math.random() * WORD_PAIRS.length)];
+    const flip = Math.random() < 0.5;
+    const mainWord = flip ? pair[0] : pair[1];
+    const hintWord = flip ? pair[1] : pair[0];
+    const imposterUid = players[Math.floor(Math.random() * players.length)];
+    const imposterName = (app.lobbyData.players[imposterUid] || {}).name || "?";
+    const nextRound = (app.lobbyData.round || 0) + 1;
+
+    await Promise.all(players.map((uid) => {
+      const isImposter = uid === imposterUid;
+      return setDoc(secretRef(app.code, uid), {
+        word: isImposter ? hintWord : mainWord,
+        isImposter
+      });
+    }));
+
+    app.currentRoundSecret = { round: nextRound, imposterUid, imposterName, realWord: mainWord, hintWord };
+    try {
+      localStorage.setItem(`imposter_hostsecret_${app.code}`, JSON.stringify(app.currentRoundSecret));
+    } catch (e){ /* ignore storage errors */ }
+
+    await updateDoc(lobbyRef(app.code), {
+      status: "playing",
+      round: increment(1),
+      reveal: deleteField(),
+      votes: {}
+    });
+  } catch (e){
+    console.error(e);
+    showToast("Runde konnte nicht gestartet werden.");
+    if (btn){ btn.disabled = false; btn.textContent = "Spiel starten"; }
+  }
+}
+
+async function castVote(votedUid, el){
+  if (!app.code || !app.uid) return;
+  try {
+    if (el) el.classList.add("voted");
+    await updateDoc(lobbyRef(app.code), { [`votes.${app.uid}`]: votedUid });
+  } catch (e){
+    console.error(e);
+    showToast("Stimme konnte nicht gespeichert werden.");
+  }
+}
+
+async function revealRound(btn){
+  if (!app.isHost || !app.lobbyData) return;
+  let secret = app.currentRoundSecret;
+  if (!secret || secret.round !== app.lobbyData.round){
+    try {
+      const raw = localStorage.getItem(`imposter_hostsecret_${app.code}`);
+      if (raw){
+        const parsed = JSON.parse(raw);
+        if (parsed.round === app.lobbyData.round) secret = parsed;
+      }
+    } catch (e){ /* ignore */ }
+  }
+  if (!secret || secret.round !== app.lobbyData.round){
+    showToast("Auflösung nicht verfügbar (Seite neu geladen?). Bitte eine neue Runde starten.");
+    return;
+  }
+  if (btn){ btn.disabled = true; btn.textContent = "Löse auf …"; }
+  try {
+    await updateDoc(lobbyRef(app.code), {
+      status: "reveal",
+      reveal: {
+        imposterUid: secret.imposterUid,
+        imposterName: secret.imposterName,
+        realWord: secret.realWord,
+        hintWord: secret.hintWord
+      }
+    });
+  } catch (e){
+    console.error(e);
+    showToast("Auflösen hat nicht geklappt.");
+    if (btn){ btn.disabled = false; btn.textContent = "Auflösen"; }
+  }
+}
+
+function leaveLobby(){
+  stopDiscussionTimer();
+  if (app.unsubLobby){ app.unsubLobby(); app.unsubLobby = null; }
+  if (app.unsubSecret){ app.unsubSecret(); app.unsubSecret = null; }
+  if (app.code && app.uid){
+    updateDoc(lobbyRef(app.code), { [`players.${app.uid}`]: deleteField() }).catch((e) => console.error(e));
+  }
+  app.code = null;
+  app.lobbyData = null;
+  app.secretData = null;
+  app.isHost = false;
+  app.currentRoundSecret = null;
+  app.localPhase = "word";
+  app.startMode = "menu";
+  app.screen = "start";
+  render();
+}
+
+function setStartError(msg){
+  const el = document.getElementById("start-error");
+  if (el) el.textContent = msg || "";
+}
+
+// ---------- Render ----------
+function render(){
+  const el = document.getElementById("app");
+  if (app.screen !== "in-lobby" || (app.lobbyData && app.lobbyData.status !== "playing") || app.localPhase !== "discussion"){
+    stopDiscussionTimer();
+  }
+
+  if (app.screen === "loading"){
+    el.innerHTML = renderLoading();
+    return;
+  }
+  if (app.screen === "start"){
+    el.innerHTML = renderStart();
+    bindStartEvents();
+    return;
+  }
+  if (app.screen === "in-lobby"){
+    if (!app.lobbyData){ el.innerHTML = renderLoading(); return; }
+    const status = app.lobbyData.status;
+    if (status === "lobby"){
+      el.innerHTML = renderWaitingRoom();
+      bindWaitingRoomEvents();
+    } else if (status === "playing"){
+      if (app.localPhase === "word"){
+        el.innerHTML = renderWordScreen();
+        bindWordEvents();
+      } else {
+        el.innerHTML = renderDiscussionScreen();
+        bindDiscussionEvents();
+        ensureDiscussionTimer();
+      }
+    } else if (status === "reveal"){
+      el.innerHTML = renderRevealScreen();
+      bindRevealEvents();
+    }
+  }
+}
+
+function renderLoading(){
+  return `<div class="screen"><div class="loading-stage">Lädt …</div></div>`;
+}
+
+function renderStart(){
+  const name = esc(app.name || "");
+  if (app.startMode === "join"){
+    return `
+      <div class="screen">
+        <div class="spacer"></div>
+        <div class="brand"><strong>🕵️ Imposter</strong></div>
+        <div class="center-col" style="flex:0; gap:18px;">
+          <div>
+            <label for="name-input">Dein Name</label>
+            <input type="text" id="name-input" placeholder="z.B. Tim" maxlength="20" value="${name}" autocomplete="off">
+          </div>
+          <div>
+            <label for="code-input">Lobby-Code</label>
+            <input type="text" id="code-input" class="code-input" placeholder="XK7Q" maxlength="4" autocomplete="off" autocapitalize="characters">
+          </div>
+          <p class="error-text" id="start-error"></p>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="join-submit-btn">Beitreten</button>
+            <button class="btn btn-ghost" id="back-btn">Zurück</button>
+          </div>
+        </div>
+        <div class="spacer"></div>
+      </div>
+    `;
+  }
+  return `
+    <div class="screen">
+      <div class="spacer"></div>
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="center-col" style="flex:0; gap:18px;">
+        <div>
+          <label for="name-input">Dein Name</label>
+          <input type="text" id="name-input" placeholder="z.B. Tim" maxlength="20" value="${name}" autocomplete="off">
+        </div>
+        <p class="error-text" id="start-error"></p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="create-btn">Lobby erstellen</button>
+          <button class="btn btn-secondary" id="show-join-btn">Lobby beitreten</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  `;
+}
+
+function bindStartEvents(){
+  const createBtn = document.getElementById("create-btn");
+  const showJoinBtn = document.getElementById("show-join-btn");
+  const backBtn = document.getElementById("back-btn");
+  const joinSubmitBtn = document.getElementById("join-submit-btn");
+
+  if (createBtn) createBtn.addEventListener("click", () => createLobby(createBtn));
+  if (showJoinBtn) showJoinBtn.addEventListener("click", () => {
+    app.startMode = "join";
+    render();
+  });
+  if (backBtn) backBtn.addEventListener("click", () => {
+    app.startMode = "menu";
+    render();
+  });
+  if (joinSubmitBtn) joinSubmitBtn.addEventListener("click", () => joinLobby(joinSubmitBtn));
+
+  const codeInput = document.getElementById("code-input");
+  if (codeInput){
+    codeInput.addEventListener("input", () => {
+      codeInput.value = codeInput.value.toUpperCase().slice(0, 4);
+    });
+  }
+}
+
+function renderWaitingRoom(){
+  const players = app.lobbyData.players || {};
+  const uids = Object.keys(players);
+  const count = uids.length;
+  const canStart = count >= MIN_PLAYERS;
+
+  const listItems = uids
+    .sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0))
+    .map((uid) => {
+      const isHostPlayer = uid === app.lobbyData.hostUid;
+      return `<li><span>${esc(players[uid].name)}</span>${isHostPlayer ? '<span class="tag">Host</span>' : ''}</li>`;
+    }).join("");
+
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="code-display">
+        <div class="label">Lobby-Code</div>
+        <div class="code">${esc(app.code)}</div>
+        <button class="btn btn-secondary copy-btn" id="copy-code-btn">Code kopieren</button>
+      </div>
+      <div class="section-title">Spieler (${count})</div>
+      <ul class="player-list">${listItems || ""}</ul>
+      <div class="spacer"></div>
+      ${app.isHost
+        ? `<button class="btn btn-primary" id="start-round-btn" ${canStart ? "" : "disabled"}>Spiel starten</button>
+           ${canStart ? "" : `<p class="hint-text">Mindestens ${MIN_PLAYERS} Spieler nötig</p>`}`
+        : `<p class="hint-text">Warte auf den Host …</p>`
+      }
+      <button class="btn btn-ghost" id="leave-btn">Lobby verlassen</button>
+    </div>
+  `;
+}
+
+function bindWaitingRoomEvents(){
+  const copyBtn = document.getElementById("copy-code-btn");
+  const startBtn = document.getElementById("start-round-btn");
+  const leaveBtn = document.getElementById("leave-btn");
+
+  if (copyBtn){
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(app.code);
+        showToast("Code kopiert!");
+      } catch (e){
+        showToast(`Code: ${app.code}`);
+      }
+    });
+  }
+  if (startBtn) startBtn.addEventListener("click", () => startRound(startBtn));
+  if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
+}
+
+function renderWordScreen(){
+  const secret = app.secretData;
+  if (!secret){
+    return `<div class="screen"><div class="loading-stage">Wort wird geladen …</div></div>`;
+  }
+  const isImposter = !!secret.isImposter;
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="word-stage">
+        <div class="word-eyebrow ${isImposter ? "imposter" : ""}">${isImposter ? "Dein Hinweiswort" : "Dein Wort"}</div>
+        <div class="the-word">${esc(secret.word)}</div>
+        ${isImposter ? `<p class="imposter-note">Du bist der Imposter. Finde raus, was die anderen meinen, ohne aufzufliegen.</p>` : ""}
+      </div>
+      <button class="btn btn-primary" id="to-discussion-btn">Zur Diskussion</button>
+    </div>
+  `;
+}
+
+function bindWordEvents(){
+  const btn = document.getElementById("to-discussion-btn");
+  if (btn) btn.addEventListener("click", goToDiscussion);
+}
+
+function renderDiscussionScreen(){
+  const players = app.lobbyData.players || {};
+  const uids = Object.keys(players);
+  const votes = app.lobbyData.votes || {};
+  const myVote = votes[app.uid];
+
+  const items = uids.map((uid) => {
+    const voted = myVote === uid;
+    return `<button class="vote-btn ${voted ? "voted" : ""}" data-uid="${esc(uid)}">
+      <span>${esc(players[uid].name)}</span>
+      <span class="vote-check">✓</span>
+    </button>`;
+  }).join("");
+
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="timer" id="timer-display">00:00</div>
+      <p class="hint-text">Stellt euch reihum Fragen. Wer wirkt komisch?</p>
+      <div class="section-title">Tippe optional auf deinen Verdacht</div>
+      <div>${items}</div>
+      <div class="spacer"></div>
+      ${app.isHost
+        ? `<button class="btn btn-primary" id="reveal-btn">Auflösen</button>`
+        : `<p class="hint-text">Warte auf Auflösung durch den Host …</p>`
+      }
+    </div>
+  `;
+}
+
+function bindDiscussionEvents(){
+  document.querySelectorAll(".vote-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const uid = btn.getAttribute("data-uid");
+      document.querySelectorAll(".vote-btn").forEach((b) => b.classList.remove("voted"));
+      castVote(uid, btn);
+    });
+  });
+  const revealBtn = document.getElementById("reveal-btn");
+  if (revealBtn) revealBtn.addEventListener("click", () => revealRound(revealBtn));
+}
+
+function renderRevealScreen(){
+  const reveal = app.lobbyData.reveal || {};
+  const players = app.lobbyData.players || {};
+  const votes = app.lobbyData.votes || {};
+  const voterUids = Object.keys(votes);
+
+  const tallyCounts = {};
+  voterUids.forEach((voterUid) => {
+    const votedUid = votes[voterUid];
+    tallyCounts[votedUid] = (tallyCounts[votedUid] || 0) + 1;
+  });
+  const correctVotes = voterUids.filter((v) => votes[v] === reveal.imposterUid).length;
+
+  let tallyHtml = "";
+  if (voterUids.length > 0){
+    const rows = Object.keys(tallyCounts)
+      .sort((a, b) => tallyCounts[b] - tallyCounts[a])
+      .map((uid) => {
+        const name = players[uid] ? players[uid].name : "?";
+        const isImp = uid === reveal.imposterUid;
+        return `<div class="tally-row ${isImp ? "is-imposter" : ""}">
+          <span>${esc(name)}${isImp ? " 🕵️" : ""}</span>
+          <span>${tallyCounts[uid]} Stimme${tallyCounts[uid] === 1 ? "" : "n"}</span>
+        </div>`;
+      }).join("");
+    tallyHtml = `
+      <div class="section-title">Abstimmung</div>
+      <p class="tally-summary">${correctVotes} von ${voterUids.length} haben richtig getippt</p>
+      <div class="card">${rows}</div>
+    `;
+  }
+
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="reveal-stage">
+        <div class="reveal-eyebrow">Der Imposter war</div>
+        <div class="reveal-name">${esc(reveal.imposterName || "?")}</div>
+        <div class="reveal-words">
+          <div class="reveal-word-row"><span class="k">Echtes Wort</span><span class="v">${esc(reveal.realWord || "?")}</span></div>
+          <div class="reveal-word-row"><span class="k">Hinweiswort</span><span class="v">${esc(reveal.hintWord || "?")}</span></div>
+        </div>
+      </div>
+      ${tallyHtml}
+      <div class="spacer"></div>
+      ${app.isHost
+        ? `<div class="btn-row">
+             <button class="btn btn-primary" id="new-round-btn">Neue Runde</button>
+             <button class="btn btn-ghost" id="leave-btn">Lobby verlassen</button>
+           </div>`
+        : `<button class="btn btn-ghost" id="leave-btn">Lobby verlassen</button>`
+      }
+    </div>
+  `;
+}
+
+function bindRevealEvents(){
+  const newRoundBtn = document.getElementById("new-round-btn");
+  const leaveBtn = document.getElementById("leave-btn");
+  if (newRoundBtn) newRoundBtn.addEventListener("click", () => startRound(newRoundBtn));
+  if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
+}
+
+render();
+</script>
+</body>
+</html>
