@@ -501,7 +501,71 @@ const WORD_PAIRS = [
   ["Zahnarzt","Kieferorthopäde"], ["Yoga","Pilates"], ["Schach","Dame"], ["Camping","Wandern"],
   ["Limonade","Cola"], ["Frisör","Barbier"], ["Supermarkt","Kiosk"],
   ["Basketball","Volleyball"], ["Ananas","Mango"], ["Whiskey","Rum"], ["Roman","Novelle"],
-  ["Tennis","Badminton"], ["Keks","Kuchen"], ["Taxi","Rikscha"], ["Segeln","Rudern"]
+  ["Tennis","Badminton"], ["Keks","Kuchen"], ["Taxi","Rikscha"], ["Segeln","Rudern"],
+  // Essen & Getränke
+  ["Apfel","Birne"], ["Erdbeere","Himbeere"], ["Zitrone","Limette"], ["Milch","Buttermilch"],
+  ["Käse","Quark"], ["Butter","Margarine"], ["Brot","Brötchen"], ["Nudeln","Reis"],
+  ["Suppe","Eintopf"], ["Salat","Rohkost"], ["Wurst","Schinken"], ["Ei","Omelett"],
+  ["Honig","Marmelade"], ["Zucker","Süßstoff"], ["Salz","Pfeffer"], ["Ketchup","Senf"],
+  ["Döner","Kebab"], ["Sushi","Sashimi"], ["Tacos","Burritos"], ["Lasagne","Cannelloni"],
+  ["Gulasch","Ragout"], ["Schnitzel","Kotelett"], ["Espresso","Cappuccino"], ["Wasser","Mineralwasser"],
+  ["Saft","Smoothie"], ["Sekt","Champagner"], ["Cocktail","Longdrink"], ["Popcorn","Chips"],
+  ["Eis","Sorbet"], ["Torte","Kuchen"], ["Pudding","Vanillecreme"], ["Müsli","Granola"],
+  ["Waffel","Pfannkuchen"], ["Gemüse","Obst"],
+  // Tiere
+  ["Löwe","Tiger"], ["Wolf","Fuchs"], ["Adler","Falke"], ["Delfin","Wal"],
+  ["Hai","Barrakuda"], ["Pinguin","Robbe"], ["Affe","Gorilla"], ["Zebra","Pferd"],
+  ["Giraffe","Kamel"], ["Schlange","Eidechse"], ["Frosch","Kröte"], ["Biene","Wespe"],
+  ["Schmetterling","Motte"], ["Spinne","Skorpion"], ["Maus","Ratte"], ["Hase","Kaninchen"],
+  ["Schaf","Ziege"], ["Kuh","Bulle"], ["Schwein","Wildschwein"], ["Ente","Gans"],
+  ["Huhn","Pute"], ["Papagei","Kakadu"], ["Eule","Kauz"], ["Krokodil","Alligator"],
+  ["Schildkröte","Salamander"],
+  // Berufe
+  ["Polizist","Feuerwehrmann"], ["Pilot","Fluglotse"], ["Koch","Bäcker"], ["Anwalt","Richter"],
+  ["Ingenieur","Techniker"], ["Architekt","Bauingenieur"], ["Journalist","Blogger"], ["Fotograf","Kameramann"],
+  ["Schauspieler","Musicaldarsteller"], ["Sänger","Rapper"], ["Maler","Grafikdesigner"], ["Bauer","Gärtner"],
+  ["Fischer","Jäger"], ["Elektriker","Klempner"], ["Bibliothekar","Buchhändler"], ["Kellner","Barkeeper"],
+  ["Zoowärter","Tierpfleger"], ["Pfarrer","Priester"], ["Soldat","Offizier"], ["Apotheker","Chemiker"],
+  // Orte & Reisen
+  ["Hotel","Hostel"], ["Flughafen","Bahnhof"], ["Museum","Galerie"], ["Restaurant","Café"],
+  ["Schwimmbad","See"], ["Zoo","Safaripark"], ["Kirche","Kloster"], ["Schloss","Burg"],
+  ["Rathaus","Gerichtsgebäude"], ["Krankenhaus","Klinik"], ["Universität","Schule"], ["Fabrik","Werkstatt"],
+  ["Markt","Basar"], ["Friedhof","Gedenkstätte"], ["Skigebiet","Berghütte"], ["Vulkan","Geysir"],
+  ["Wüste","Steppe"], ["Dschungel","Regenwald"], ["Fjord","Bucht"], ["Großstadt","Kleinstadt"],
+  // Sport & Freizeit
+  ["Schwimmen","Tauchen"], ["Klettern","Bouldern"], ["Joggen","Sprinten"], ["Skifahren","Snowboarden"],
+  ["Golf","Minigolf"], ["Bowling","Kegeln"], ["Boxen","Kickboxen"], ["Ringen","Judo"],
+  ["Angeln","Fischen"], ["Reiten","Voltigieren"], ["Skateboard","Longboard"], ["Surfen","Kitesurfen"],
+  ["Rudern","Kanufahren"], ["Darts","Billard"], ["Poker","Blackjack"], ["Videospiel","Brettspiel"],
+  ["Puzzle","Kreuzworträtsel"], ["Malen","Zeichnen"], ["Fotografieren","Filmen"], ["Tanzen","Ballett"],
+  // Technik & Medien
+  ["Laptop","Computer"], ["Kamera","Camcorder"], ["Kopfhörer","Lautsprecher"], ["Drucker","Scanner"],
+  ["Fernseher","Beamer"], ["Internet","WLAN"], ["App","Programm"], ["Roboter","Drohne"],
+  ["Batterie","Akku"], ["Router","Modem"], ["Podcast","Hörbuch"], ["Zeitung","Zeitschrift"],
+  ["Comic","Manga"], ["Serie","Film"], ["Netflix","YouTube"], ["Instagram","TikTok"],
+  ["E-Mail","Brief"], ["Passwort","PIN"],
+  // Natur & Wetter
+  ["Sonne","Mond"], ["Stern","Planet"], ["Blitz","Donner"], ["Nebel","Wolke"],
+  ["Sturm","Orkan"], ["Hitze","Kälte"], ["Frost","Eis"], ["Vulkan","Erdbeben"],
+  ["Fluss","Bach"], ["Wasserfall","Quelle"], ["Wüste","Savanne"], ["Wiese","Feld"],
+  ["Baum","Strauch"], ["Blume","Pflanze"], ["Pilz","Moos"],
+  // Fahrzeuge
+  ["Fahrrad","Roller"], ["Lastwagen","Transporter"], ["Boot","Schiff"], ["U-Boot","Fähre"],
+  ["Rakete","Satellit"], ["Traktor","Bagger"], ["Straßenbahn","U-Bahn"], ["Wohnmobil","Wohnwagen"],
+  ["Kutsche","Pferdewagen"],
+  // Feiertage & Events
+  ["Weihnachten","Silvester"], ["Ostern","Erntedank"], ["Geburtstag","Jubiläum"], ["Hochzeit","Verlobung"],
+  ["Karneval","Halloween"], ["Konzert","Festival"], ["Zirkus","Jahrmarkt"], ["Messe","Ausstellung"],
+  ["Turnier","Meisterschaft"],
+  // Alltag & Gegenstände
+  ["Regenschirm","Poncho"], ["Rucksack","Koffer"], ["Brille","Sonnenbrille"], ["Uhr","Wecker"],
+  ["Schlüssel","Chipkarte"], ["Kerze","Taschenlampe"], ["Spiegel","Fenster"], ["Teppich","Vorhang"],
+  ["Sofa","Sessel"], ["Bett","Couch"], ["Dusche","Badewanne"], ["Zahnbürste","Zahnpasta"],
+  ["Seife","Shampoo"], ["Besen","Staubsauger"], ["Schere","Messer"],
+  // Mode
+  ["Jeans","Chino"], ["Pullover","Sweatshirt"], ["Jacke","Mantel"], ["Schuhe","Sneaker"],
+  ["Stiefel","Sandalen"], ["Mütze","Schal"], ["Handschuhe","Fäustlinge"], ["Krawatte","Fliege"],
+  ["Anzug","Smoking"], ["Kleid","Rock"]
 ];
 
 // Opt-in only (spicyEnabled on the lobby doc, default off) — frech/angedeutet,
@@ -513,7 +577,13 @@ const SPICY_WORD_PAIRS = [
   ["Quickie","Kuscheln"], ["Bettgeschichte","Liebesnacht"], ["Kondom","Pille"],
   ["Pornhub","OnlyFans"], ["Poledance","Lapdance"], ["Junggesellenabschied","Manöverkritik"],
   ["Sexting","Nacktfoto"], ["Fetisch","Vorliebe"], ["Liebeskummer","Trennungssex"],
-  ["Callgirl","Escort"], ["Swinger-Club","Dreier"]
+  ["Callgirl","Escort"], ["Swinger-Club","Dreier"],
+  ["Verführung","Verlockung"], ["Vorspiel","Nachspiel"], ["Bettgeflüster","Kuschelabend"],
+  ["Erotikmassage","Wellnessmassage"], ["Liebesbrief","Sexnachricht"], ["Fremdgehen","Heimlichtuerei"],
+  ["Speed-Dating","Rendezvous"], ["Wilde Nacht","Partynacht"], ["Bettwärmer","Kuschelpartner"],
+  ["Junggesellinnenabschied","Bachelorette"], ["Sugar Daddy","Sugar Baby"], ["Liebeserklärung","Heiratsantrag"],
+  ["Aphrodisiakum","Liebestrank"], ["Flitterwochen","Honeymoon"], ["Peepshow","Table Dance"],
+  ["Liebeskino","Erotikfilm"]
 ];
 
 function esc(str){
