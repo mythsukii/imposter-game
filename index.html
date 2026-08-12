@@ -875,6 +875,8 @@ async function startRound(btn){
     const hintWord = flip ? pair[1] : pair[0];
     const imposterUid = players[Math.floor(Math.random() * players.length)];
     const imposterName = (app.lobbyData.players[imposterUid] || {}).name || "?";
+    const starterUid = players[Math.floor(Math.random() * players.length)];
+    const starterName = (app.lobbyData.players[starterUid] || {}).name || "?";
     const nextRound = (app.lobbyData.round || 0) + 1;
 
     await withTimeout(Promise.all(players.map((uid) => {
@@ -894,7 +896,9 @@ async function startRound(btn){
       status: "playing",
       round: increment(1),
       reveal: deleteField(),
-      votes: {}
+      votes: {},
+      starterUid,
+      starterName
     }), "Runde starten");
   } catch (e){
     console.error(e);
@@ -931,6 +935,25 @@ async function castVote(votedUid, el){
 // Ends the discussion and opens the dedicated voting phase. No secret/word
 // data involved here — just a status flip, same host-authoritative pattern
 // as the rest of the state machine.
+async function backToLobby(btn){
+  if (!app.isHost || !app.lobbyData) return;
+  const originalText = btn ? btn.textContent : "Zurück in die Lobby";
+  if (btn){ btn.disabled = true; btn.textContent = "Kehre zurück …"; }
+  try {
+    await withTimeout(updateDoc(lobbyRef(app.code), {
+      status: "lobby",
+      reveal: deleteField(),
+      votes: deleteField(),
+      starterUid: deleteField(),
+      starterName: deleteField()
+    }), "Zurück in die Lobby");
+  } catch (e){
+    console.error(e);
+    showToast(`Zurück in die Lobby hat nicht geklappt.${errDetail(e)}`);
+    if (btn){ btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
 async function startVoting(btn){
   if (!app.isHost || !app.lobbyData) return;
   const originalText = btn ? btn.textContent : "Abstimmung starten";
@@ -1279,6 +1302,7 @@ function renderWordScreen(){
         <div class="the-word">${esc(secret.word)}</div>
         ${isImposter ? `<p class="imposter-note">Du bist der Imposter. Finde raus, was die anderen meinen, ohne aufzufliegen.</p>` : ""}
       </div>
+      ${app.lobbyData.starterName ? `<p class="hint-text">🎤 ${esc(app.lobbyData.starterName)} fängt an zu fragen</p>` : ""}
       <button class="btn btn-primary" id="to-discussion-btn">Zur Diskussion</button>
     </div>
   `;
@@ -1295,6 +1319,7 @@ function renderDiscussionScreen(){
       <div class="brand"><strong>🕵️ Imposter</strong></div>
       ${connStatusHtml()}
       <div class="timer" id="timer-display">00:00</div>
+      ${app.lobbyData.starterName ? `<p class="hint-text">🎤 ${esc(app.lobbyData.starterName)} fängt an zu fragen</p>` : ""}
       <p class="hint-text">Stellt euch reihum Fragen. Wer wirkt komisch?</p>
       <div class="spacer"></div>
       ${app.isHost
@@ -1422,6 +1447,7 @@ function renderRevealScreen(){
       ${app.isHost
         ? `<div class="btn-row">
              <button class="btn btn-primary" id="new-round-btn">Neue Runde</button>
+             <button class="btn btn-ghost" id="back-to-lobby-btn">Zurück in die Lobby</button>
              <button class="btn btn-ghost" id="leave-btn">Lobby verlassen</button>
            </div>`
         : `<button class="btn btn-ghost" id="leave-btn">Lobby verlassen</button>`
@@ -1432,8 +1458,10 @@ function renderRevealScreen(){
 
 function bindRevealEvents(){
   const newRoundBtn = document.getElementById("new-round-btn");
+  const backToLobbyBtn = document.getElementById("back-to-lobby-btn");
   const leaveBtn = document.getElementById("leave-btn");
   if (newRoundBtn) newRoundBtn.addEventListener("click", () => startRound(newRoundBtn));
+  if (backToLobbyBtn) backToLobbyBtn.addEventListener("click", () => backToLobby(backToLobbyBtn));
   if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
   bindSpicyToggleEvents();
 }
