@@ -357,6 +357,47 @@
     margin-bottom: 6px;
   }
 
+  .verdict-banner{
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.4;
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin: 4px 0 20px;
+  }
+  .verdict-ok{ background: rgba(61,220,151,0.14); color: var(--ok); }
+  .verdict-bad{ background: rgba(255,90,110,0.14); color: var(--danger); }
+  .verdict-neutral{ background: rgba(156,150,170,0.14); color: var(--text-dim); }
+
+  .spicy-toggle{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--text);
+    cursor: pointer;
+    margin: 14px 0 4px;
+  }
+  .spicy-toggle input[type="checkbox"]{
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .spicy-hint{
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin: 6px 0 4px;
+  }
+
   .loading-stage{
     flex: 1;
     display: flex;
@@ -461,6 +502,18 @@ const WORD_PAIRS = [
   ["Limonade","Cola"], ["Frisör","Barbier"], ["Supermarkt","Kiosk"],
   ["Basketball","Volleyball"], ["Ananas","Mango"], ["Whiskey","Rum"], ["Roman","Novelle"],
   ["Tennis","Badminton"], ["Keks","Kuchen"], ["Taxi","Rikscha"], ["Segeln","Rudern"]
+];
+
+// Opt-in only (spicyEnabled on the lobby doc, default off) — frech/angedeutet,
+// bewusst nicht explizit/vulgär gehalten.
+const SPICY_WORD_PAIRS = [
+  ["Flirt","Anmache"], ["Erstes Date","Blind Date"], ["One-Night-Stand","Affäre"],
+  ["Seitensprung","Techtelmechtel"], ["Tinder","Grindr"], ["Stripclub","Table Dance"],
+  ["Kuss","Zungenkuss"], ["Dessous","Bikini"], ["Sexy","Verführerisch"],
+  ["Quickie","Kuscheln"], ["Bettgeschichte","Liebesnacht"], ["Kondom","Pille"],
+  ["Pornhub","OnlyFans"], ["Poledance","Lapdance"], ["Junggesellenabschied","Manöverkritik"],
+  ["Sexting","Nacktfoto"], ["Fetisch","Vorliebe"], ["Liebeskummer","Trennungssex"],
+  ["Callgirl","Escort"], ["Swinger-Club","Dreier"]
 ];
 
 function esc(str){
@@ -634,6 +687,7 @@ async function createLobby(btn){
       status: "lobby",
       players: { [app.uid]: { name, joinedAt: Date.now() } },
       round: 0,
+      spicyEnabled: false,
       createdAt: serverTimestamp()
     }), "Lobby anlegen");
     enterLobby(code);
@@ -744,7 +798,8 @@ async function startRound(btn){
   const originalText = btn ? btn.textContent : "Spiel starten";
   if (btn){ btn.disabled = true; btn.textContent = "Starte Runde …"; }
   try {
-    const pair = WORD_PAIRS[Math.floor(Math.random() * WORD_PAIRS.length)];
+    const pool = app.lobbyData.spicyEnabled ? WORD_PAIRS.concat(SPICY_WORD_PAIRS) : WORD_PAIRS;
+    const pair = pool[Math.floor(Math.random() * pool.length)];
     const flip = Math.random() < 0.5;
     const mainWord = flip ? pair[0] : pair[1];
     const hintWord = flip ? pair[1] : pair[0];
@@ -778,6 +833,16 @@ async function startRound(btn){
   }
 }
 
+async function toggleSpicy(checked){
+  if (!app.isHost || !app.code) return;
+  try {
+    await withTimeout(updateDoc(lobbyRef(app.code), { spicyEnabled: checked }), "Spicy-Einstellung speichern");
+  } catch (e){
+    console.error(e);
+    showToast(`Einstellung konnte nicht gespeichert werden.${errDetail(e)}`);
+  }
+}
+
 let voteInFlight = false;
 async function castVote(votedUid, el){
   if (!app.code || !app.uid || voteInFlight) return;
@@ -793,7 +858,27 @@ async function castVote(votedUid, el){
   }
 }
 
-async function revealRound(btn){
+// Ends the discussion and opens the dedicated voting phase. No secret/word
+// data involved here — just a status flip, same host-authoritative pattern
+// as the rest of the state machine.
+async function startVoting(btn){
+  if (!app.isHost || !app.lobbyData) return;
+  const originalText = btn ? btn.textContent : "Abstimmung starten";
+  if (btn){ btn.disabled = true; btn.textContent = "Starte Abstimmung …"; }
+  try {
+    await withTimeout(updateDoc(lobbyRef(app.code), { status: "voting" }), "Abstimmung starten");
+  } catch (e){
+    console.error(e);
+    showToast(`Abstimmung konnte nicht gestartet werden.${errDetail(e)}`);
+    if (btn){ btn.disabled = false; btn.textContent = originalText; }
+  }
+}
+
+// Host tallies the votes locally (same pattern as word assignment: host
+// computes, then writes one authoritative result for everyone) and reveals.
+// Callable even if not everyone has voted yet, so an inactive player can't
+// stall the game.
+async function evaluateVotes(btn){
   if (!app.isHost || !app.lobbyData) return;
   let secret = app.currentRoundSecret;
   if (!secret || secret.round !== app.lobbyData.round){
@@ -806,24 +891,46 @@ async function revealRound(btn){
     } catch (e){ /* ignore */ }
   }
   if (!secret || secret.round !== app.lobbyData.round){
-    showToast("Auflösung nicht verfügbar (Seite neu geladen?). Bitte eine neue Runde starten.");
+    showToast("Auswertung nicht verfügbar (Seite neu geladen?). Bitte eine neue Runde starten.");
     return;
   }
-  if (btn){ btn.disabled = true; btn.textContent = "Löse auf …"; }
+  if (btn){ btn.disabled = true; btn.textContent = "Werte aus …"; }
   try {
+    const players = app.lobbyData.players || {};
+    const uids = Object.keys(players);
+    const votes = app.lobbyData.votes || {};
+
+    const voteCounts = {};
+    uids.forEach((uid) => { voteCounts[uid] = 0; });
+    Object.values(votes).forEach((suspectUid) => {
+      if (Object.prototype.hasOwnProperty.call(voteCounts, suspectUid)) voteCounts[suspectUid]++;
+    });
+
+    const maxVotes = uids.length ? Math.max(...uids.map((uid) => voteCounts[uid])) : 0;
+    const topUids = maxVotes > 0 ? uids.filter((uid) => voteCounts[uid] === maxVotes) : [];
+    // Unique winner -> that's the group's suspect. No votes at all, or a tie
+    // between 2+ people, both count as "no clear suspicion" (not a win).
+    const groupPickUid = topUids.length === 1 ? topUids[0] : null;
+    const groupPickName = groupPickUid ? (players[groupPickUid].name || "?") : null;
+    const groupCorrect = groupPickUid ? (groupPickUid === secret.imposterUid) : null;
+
     await withTimeout(updateDoc(lobbyRef(app.code), {
       status: "reveal",
       reveal: {
         imposterUid: secret.imposterUid,
         imposterName: secret.imposterName,
         realWord: secret.realWord,
-        hintWord: secret.hintWord
+        hintWord: secret.hintWord,
+        groupPickUid,
+        groupPickName,
+        groupCorrect,
+        voteCounts
       }
-    }), "Auflösen");
+    }), "Auswerten");
   } catch (e){
     console.error(e);
-    showToast(`Auflösen hat nicht geklappt.${errDetail(e)}`);
-    if (btn){ btn.disabled = false; btn.textContent = "Auflösen"; }
+    showToast(`Auswerten hat nicht geklappt.${errDetail(e)}`);
+    if (btn){ btn.disabled = false; btn.textContent = "Auswerten"; }
   }
 }
 
@@ -889,6 +996,9 @@ function render(){
         bindDiscussionEvents();
         ensureDiscussionTimer();
       }
+    } else if (status === "voting"){
+      el.innerHTML = renderVotingScreen();
+      bindVotingEvents();
     } else if (status === "reveal"){
       el.innerHTML = renderRevealScreen();
       bindRevealEvents();
@@ -1006,6 +1116,28 @@ function bindStartEvents(){
   }
 }
 
+// Shared between the waiting room and the reveal screen (host can flip this
+// before any round, not just the very first one). Host-only control; other
+// players just get a read-only heads-up so nobody is surprised by a spicy word.
+function spicySectionHtml(){
+  const enabled = !!(app.lobbyData && app.lobbyData.spicyEnabled);
+  if (app.isHost){
+    return `
+      <label class="spicy-toggle" for="spicy-toggle">
+        <input type="checkbox" id="spicy-toggle" ${enabled ? "checked" : ""}>
+        <span>🌶️ Spicy-Wörter (18+) mit einbeziehen</span>
+      </label>
+      <p class="spicy-hint">Wird für alle Spieler in der Lobby sichtbar, sobald aktiviert.</p>
+    `;
+  }
+  return enabled ? `<p class="hint-text">🌶️ Spicy-Wörter (18+) sind für diese Runde aktiviert</p>` : "";
+}
+
+function bindSpicyToggleEvents(){
+  const toggle = document.getElementById("spicy-toggle");
+  if (toggle) toggle.addEventListener("change", () => toggleSpicy(toggle.checked));
+}
+
 function renderWaitingRoom(){
   const players = app.lobbyData.players || {};
   const uids = Object.keys(players);
@@ -1030,6 +1162,7 @@ function renderWaitingRoom(){
       </div>
       <div class="section-title">Spieler (${count})</div>
       <ul class="player-list">${listItems || ""}</ul>
+      ${spicySectionHtml()}
       <div class="spacer"></div>
       ${app.isHost
         ? `<button class="btn btn-primary" id="start-round-btn" ${canStart ? "" : "disabled"}>Spiel starten</button>
@@ -1058,6 +1191,7 @@ function bindWaitingRoomEvents(){
   }
   if (startBtn) startBtn.addEventListener("click", () => startRound(startBtn));
   if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
+  bindSpicyToggleEvents();
 }
 
 function renderWordScreen(){
@@ -1086,12 +1220,37 @@ function bindWordEvents(){
 }
 
 function renderDiscussionScreen(){
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
+      <div class="timer" id="timer-display">00:00</div>
+      <p class="hint-text">Stellt euch reihum Fragen. Wer wirkt komisch?</p>
+      <div class="spacer"></div>
+      ${app.isHost
+        ? `<button class="btn btn-primary" id="start-voting-btn">Abstimmung starten</button>`
+        : `<p class="hint-text">Warte, bis der Host die Abstimmung startet …</p>`
+      }
+    </div>
+  `;
+}
+
+function bindDiscussionEvents(){
+  const startVotingBtn = document.getElementById("start-voting-btn");
+  if (startVotingBtn) startVotingBtn.addEventListener("click", () => startVoting(startVotingBtn));
+}
+
+function renderVotingScreen(){
   const players = app.lobbyData.players || {};
   const uids = Object.keys(players);
   const votes = app.lobbyData.votes || {};
   const myVote = votes[app.uid];
+  const votedCount = uids.filter((uid) => votes[uid] !== undefined).length;
 
-  const items = uids.map((uid) => {
+  // You can't vote for yourself — keeps the group's suspicion pointed
+  // outward, and avoids a self-vote muddying the tally.
+  const suspectUids = uids.filter((uid) => uid !== app.uid);
+  const items = suspectUids.map((uid) => {
     const voted = myVote === uid;
     return `<button class="vote-btn ${voted ? "voted" : ""}" data-uid="${esc(uid)}">
       <span>${esc(players[uid].name)}</span>
@@ -1103,20 +1262,20 @@ function renderDiscussionScreen(){
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
       ${connStatusHtml()}
-      <div class="timer" id="timer-display">00:00</div>
-      <p class="hint-text">Stellt euch reihum Fragen. Wer wirkt komisch?</p>
-      <div class="section-title">Tippe optional auf deinen Verdacht</div>
+      <div class="section-title">Wer ist der Imposter?</div>
+      <p class="hint-text">Tippt euch auf eine Person ein. Du kannst deine Wahl ändern, solange der Host noch nicht ausgewertet hat.</p>
       <div>${items}</div>
+      <p class="hint-text">${votedCount}/${uids.length} haben abgestimmt</p>
       <div class="spacer"></div>
       ${app.isHost
-        ? `<button class="btn btn-primary" id="reveal-btn">Auflösen</button>`
-        : `<p class="hint-text">Warte auf Auflösung durch den Host …</p>`
+        ? `<button class="btn btn-primary" id="evaluate-btn">Auswerten</button>`
+        : `<p class="hint-text">Warte auf die Auswertung durch den Host …</p>`
       }
     </div>
   `;
 }
 
-function bindDiscussionEvents(){
+function bindVotingEvents(){
   document.querySelectorAll(".vote-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const uid = btn.getAttribute("data-uid");
@@ -1124,41 +1283,53 @@ function bindDiscussionEvents(){
       castVote(uid, btn);
     });
   });
-  const revealBtn = document.getElementById("reveal-btn");
-  if (revealBtn) revealBtn.addEventListener("click", () => revealRound(revealBtn));
+  const evalBtn = document.getElementById("evaluate-btn");
+  if (evalBtn) evalBtn.addEventListener("click", () => evaluateVotes(evalBtn));
 }
 
 function renderRevealScreen(){
   const reveal = app.lobbyData.reveal || {};
   const players = app.lobbyData.players || {};
   const votes = app.lobbyData.votes || {};
-  const voterUids = Object.keys(votes);
+  const voteCounts = reveal.voteCounts || {};
 
-  const tallyCounts = {};
-  voterUids.forEach((voterUid) => {
-    const votedUid = votes[voterUid];
-    tallyCounts[votedUid] = (tallyCounts[votedUid] || 0) + 1;
-  });
-  const correctVotes = voterUids.filter((v) => votes[v] === reveal.imposterUid).length;
-
-  let tallyHtml = "";
-  if (voterUids.length > 0){
-    const rows = Object.keys(tallyCounts)
-      .sort((a, b) => tallyCounts[b] - tallyCounts[a])
-      .map((uid) => {
-        const name = players[uid] ? players[uid].name : "?";
-        const isImp = uid === reveal.imposterUid;
-        return `<div class="tally-row ${isImp ? "is-imposter" : ""}">
-          <span>${esc(name)}${isImp ? " 🕵️" : ""}</span>
-          <span>${tallyCounts[uid]} Stimme${tallyCounts[uid] === 1 ? "" : "n"}</span>
-        </div>`;
-      }).join("");
-    tallyHtml = `
-      <div class="section-title">Abstimmung</div>
-      <p class="tally-summary">${correctVotes} von ${voterUids.length} haben richtig getippt</p>
-      <div class="card">${rows}</div>
-    `;
+  let verdictHtml;
+  if (reveal.groupPickUid && reveal.groupCorrect === true){
+    verdictHtml = `<p class="verdict-banner verdict-ok">🎉 Ihr habt den Imposter erwischt!</p>`;
+  } else if (reveal.groupPickUid && reveal.groupCorrect === false){
+    verdictHtml = `<p class="verdict-banner verdict-bad">😈 Der Imposter ist durchgekommen! Die Gruppe hat ${esc(reveal.groupPickName || "jemand anderen")} verdächtigt.</p>`;
+  } else {
+    verdictHtml = `<p class="verdict-banner verdict-neutral">🤷 Kein eindeutiger Verdacht — der Imposter kommt so oder so durch.</p>`;
   }
+
+  // voteCounts (host-computed at evaluation) is the source of truth for the
+  // tally. Falls back to just listing players if an old-format reveal has no
+  // voteCounts (e.g. mid-migration data).
+  const tallyUids = Object.keys(voteCounts).length ? Object.keys(voteCounts) : Object.keys(players);
+  const tallyRows = tallyUids
+    .filter((uid) => players[uid])
+    .sort((a, b) => (voteCounts[b] || 0) - (voteCounts[a] || 0))
+    .map((uid) => {
+      const name = players[uid] ? players[uid].name : "?";
+      const isImp = uid === reveal.imposterUid;
+      const isPick = uid === reveal.groupPickUid;
+      const count = voteCounts[uid] || 0;
+      return `<div class="tally-row ${isImp ? "is-imposter" : ""}">
+        <span>${esc(name)}${isImp ? " 🕵️" : ""}${isPick ? " 👉" : ""}</span>
+        <span>${count} Stimme${count === 1 ? "" : "n"}</span>
+      </div>`;
+    }).join("");
+
+  const voterUids = Object.keys(votes);
+  const whoVotedWhomHtml = voterUids.length ? `
+    <div class="section-title">Wer hat wen verdächtigt</div>
+    <div class="card">${voterUids.map((voterUid) => {
+      const voterName = players[voterUid] ? players[voterUid].name : "?";
+      const suspectUid = votes[voterUid];
+      const suspectName = players[suspectUid] ? players[suspectUid].name : "?";
+      return `<div class="tally-row"><span>${esc(voterName)}</span><span>→ ${esc(suspectName)}</span></div>`;
+    }).join("")}</div>
+  ` : "";
 
   return `
     <div class="screen">
@@ -1172,7 +1343,11 @@ function renderRevealScreen(){
           <div class="reveal-word-row"><span class="k">Hinweiswort</span><span class="v">${esc(reveal.hintWord || "?")}</span></div>
         </div>
       </div>
-      ${tallyHtml}
+      ${verdictHtml}
+      <div class="section-title">Abstimmung</div>
+      <div class="card">${tallyRows}</div>
+      ${whoVotedWhomHtml}
+      ${spicySectionHtml()}
       <div class="spacer"></div>
       ${app.isHost
         ? `<div class="btn-row">
@@ -1190,6 +1365,7 @@ function bindRevealEvents(){
   const leaveBtn = document.getElementById("leave-btn");
   if (newRoundBtn) newRoundBtn.addEventListener("click", () => startRound(newRoundBtn));
   if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
+  bindSpicyToggleEvents();
 }
 
 render();
