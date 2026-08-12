@@ -216,6 +216,39 @@
     padding: 4px 8px;
     border-radius: 999px;
   }
+  .li-actions{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .icon-btn{
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .icon-btn:active{ transform: scale(0.92); background: var(--surface-2); }
+  .icon-btn.confirm{ color: var(--ok); }
+  .icon-btn.cancel{ color: var(--danger); }
+  .player-list li.editing{ gap: 10px; }
+  .edit-name-input{
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 9px 12px;
+    outline: none;
+  }
   .online-dot{
     display: inline-block;
     width: 7px;
@@ -625,7 +658,7 @@ function isPlayerOnline(player){
 function playerNameHtml(uid, players){
   const p = (players && players[uid]) || {};
   const online = isPlayerOnline(p);
-  return `<span class="online-dot ${online ? "online" : ""}"></span>${esc(p.name || "?")}`;
+  return `<span class="online-dot ${online ? "online" : ""}" data-uid="${esc(uid)}"></span>${esc(p.name || "?")}`;
 }
 
 function generateCode(){
@@ -662,7 +695,9 @@ const app = {
   online: (typeof navigator !== "undefined" ? navigator.onLine : true),
   connLostLobby: false,
   connLostSecret: false,
-  authErrorDetail: ""
+  authErrorDetail: "",
+  editingOwnName: false,
+  editingOwnNameDraft: null
 };
 
 // Client-side timeout wrapper: Firestore calls have no built-in short timeout,
@@ -728,16 +763,70 @@ function stopHeartbeat(){
 // Online/offline is computed from lastSeen vs. Date.now() at render time, so
 // it needs to be re-evaluated even when no new Firestore snapshot comes in
 // (otherwise a dot would just freeze "online" forever once the last event
-// arrived). This ticks a re-render every 5s, only while actually in a lobby.
+// arrived). This used to call the full render() every 5s, which replaces the
+// entire screen's innerHTML — replaying every CSS fade/scale-in animation
+// and, worse, wiping out anything the user was mid-typing in a text input
+// (like the imposter's word guess on the "guessing" screen). Ticking
+// updateOnlineDots() instead just flips the .online class on the existing
+// dot elements in place, with no DOM rebuild.
 let presenceTickHandle = null;
 function startPresenceTick(){
   stopPresenceTick();
-  presenceTickHandle = setInterval(() => {
-    if (app.screen === "in-lobby") render();
-  }, 5000);
+  presenceTickHandle = setInterval(updateOnlineDots, 5000);
 }
 function stopPresenceTick(){
   if (presenceTickHandle){ clearInterval(presenceTickHandle); presenceTickHandle = null; }
+}
+
+// Lightweight presence refresh: toggles online/offline dots directly on the
+// existing DOM nodes (matched via data-uid, see playerNameHtml) instead of
+// going through render(). Used by the presence tick above and by the
+// heartbeat-only snapshot short-circuit in subscribeLobby() below.
+function updateOnlineDots(){
+  if (app.screen !== "in-lobby" || !app.lobbyData) return;
+  const players = app.lobbyData.players || {};
+  document.querySelectorAll(".online-dot[data-uid]").forEach((dot) => {
+    const uid = dot.getAttribute("data-uid");
+    dot.classList.toggle("online", isPlayerOnline(players[uid]));
+  });
+}
+
+// Order-independent deep equality for plain JSON-ish data (objects, arrays,
+// primitives) — used below to tell a "nothing but a heartbeat changed"
+// snapshot apart from one with an actual game-state change. Deliberately not
+// using JSON.stringify for this: Firestore doesn't guarantee stable key
+// ordering between snapshots of the "same" data, and a false negative here
+// (treating a real change as heartbeat-only) would silently skip a needed
+// re-render, which is worse than the flicker this is fixing.
+function deepEqualIgnoring(a, b){
+  if (a === b) return true;
+  if (typeof a !== typeof b || a === null || b === null) return a === b;
+  if (typeof a !== "object") return a === b;
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((k) => deepEqualIgnoring(a[k], b[k]));
+}
+
+// True if the only difference between two lobby-doc snapshots is players'
+// lastSeen timestamps (i.e. someone's heartbeat) — everything that actually
+// affects rendered content (players joining/leaving, status, votes, reveal,
+// round, spicyEnabled, ...) is unchanged. createdAt is dropped too since
+// it's a serverTimestamp sentinel/Timestamp value irrelevant to rendering.
+function isHeartbeatOnlyChange(prevData, nextData){
+  if (!prevData || !nextData) return false;
+  const strip = (data) => {
+    const copy = { ...data };
+    delete copy.createdAt;
+    const players = {};
+    Object.keys(copy.players || {}).forEach((uid) => {
+      const p = copy.players[uid] || {};
+      players[uid] = { name: p.name, joinedAt: p.joinedAt };
+    });
+    copy.players = players;
+    return copy;
+  };
+  return deepEqualIgnoring(strip(prevData), strip(nextData));
 }
 
 // ---------- Auth ----------
@@ -875,6 +964,8 @@ function enterLobby(code){
   app.currentRoundSecret = null;
   app.connLostLobby = false;
   app.connLostSecret = false;
+  app.editingOwnName = false;
+  app.editingOwnNameDraft = null;
   subscribeLobby(code);
   subscribeSecret(code, app.uid);
   startHeartbeat();
@@ -892,13 +983,22 @@ function subscribeLobby(code){
     app.connLostLobby = false;
     if (!snap.exists()){ render(); return; }
     const data = snap.data();
+    const prevData = app.lobbyData;
     app.lobbyData = data;
     app.isHost = data.hostUid === app.uid;
     if (data.status === "playing" && data.round !== app.lastSeenRound){
       app.localPhase = "word";
       app.lastSeenRound = data.round;
     }
-    render();
+    // Every player's heartbeat write touches this same lobby doc, so without
+    // this check everyone's screen would fully rebuild every ~10s / (player
+    // count) just from presence pings — replaying CSS animations and, on the
+    // "guessing" screen, wiping out the imposter's in-progress word guess.
+    if (isHeartbeatOnlyChange(prevData, data)){
+      updateOnlineDots();
+    } else {
+      render();
+    }
   }, (err) => {
     console.error(err);
     if (!app.connLostLobby){
@@ -988,6 +1088,17 @@ async function toggleSpicy(checked){
   }
 }
 
+// Lets a player rename themselves while already in a lobby (not just once on
+// the start screen). Same write pattern as votes/heartbeat: a normal member
+// updating their own players.{uid} entry, no host relay needed. Only ever
+// called with app.uid as the target — there's no path to rename anyone else.
+async function renameSelf(newName){
+  if (!app.code || !app.uid) return;
+  await withTimeout(updateDoc(lobbyRef(app.code), { [`players.${app.uid}.name`]: newName }), "Namen ändern");
+  localStorage.setItem("imposter_name", newName);
+  app.name = newName;
+}
+
 let voteInFlight = false;
 async function castVote(votedUid, el){
   if (!app.code || !app.uid || voteInFlight) return;
@@ -1058,6 +1169,14 @@ async function evaluateVotes(btn){
     showToast("Auswertung nicht verfügbar (Seite neu geladen?). Bitte eine neue Runde starten.");
     return;
   }
+  const preCheckPlayers = app.lobbyData.players || {};
+  const preCheckUids = Object.keys(preCheckPlayers);
+  const preCheckVotes = app.lobbyData.votes || {};
+  const preCheckVotedCount = preCheckUids.filter((uid) => preCheckVotes[uid] !== undefined).length;
+  if (preCheckUids.length && preCheckVotedCount < preCheckUids.length){
+    showToast("Noch nicht alle haben abgestimmt.");
+    return;
+  }
   if (btn){ btn.disabled = true; btn.textContent = "Werte aus …"; }
   try {
     const players = app.lobbyData.players || {};
@@ -1073,28 +1192,75 @@ async function evaluateVotes(btn){
     const maxVotes = uids.length ? Math.max(...uids.map((uid) => voteCounts[uid])) : 0;
     const topUids = maxVotes > 0 ? uids.filter((uid) => voteCounts[uid] === maxVotes) : [];
     // Unique winner -> that's the group's suspect. No votes at all, or a tie
-    // between 2+ people, both count as "no clear suspicion" (not a win).
+    // between 2+ people, both count as "no clear suspicion" — and per Tim's
+    // rule that's a loss for the group, not a neutral outcome: only a clean,
+    // unique pick of the actual imposter counts as the crewmates winning.
     const groupPickUid = topUids.length === 1 ? topUids[0] : null;
     const groupPickName = groupPickUid ? (players[groupPickUid].name || "?") : null;
-    const groupCorrect = groupPickUid ? (groupPickUid === secret.imposterUid) : null;
+    const groupCorrect = groupPickUid === secret.imposterUid;
 
+    const revealPayload = {
+      imposterUid: secret.imposterUid,
+      imposterName: secret.imposterName,
+      realWord: secret.realWord,
+      hintWord: secret.hintWord,
+      groupPickUid,
+      groupPickName,
+      groupCorrect,
+      voteCounts
+    };
+
+    // Crewmates got it right -> imposter gets one last chance to guess the
+    // real word before the result is final (a correct guess flips the win
+    // back to the imposter). Otherwise the imposter already won outright
+    // (wrong suspect or no clear suspicion), so there's nothing to guess for.
     await withTimeout(updateDoc(lobbyRef(app.code), {
-      status: "reveal",
-      reveal: {
-        imposterUid: secret.imposterUid,
-        imposterName: secret.imposterName,
-        realWord: secret.realWord,
-        hintWord: secret.hintWord,
-        groupPickUid,
-        groupPickName,
-        groupCorrect,
-        voteCounts
-      }
+      status: groupCorrect ? "guessing" : "reveal",
+      reveal: revealPayload
     }), "Auswerten");
   } catch (e){
     console.error(e);
     showToast(`Auswerten hat nicht geklappt.${errDetail(e)}`);
     if (btn){ btn.disabled = false; btn.textContent = "Auswerten"; }
+  }
+}
+
+// Loose comparison for the imposter's word guess: trims, lowercases and
+// collapses whitespace so "  Kaffee " / "kaffee" / "KAFFEE" all match. No
+// fuzzy/typo tolerance and no accent-stripping on purpose — German umlauts
+// (ä/ö/ü) are meaningful letters, not accents, so "normalizing" them away
+// would make wrong words match. Deliberately simple, not over-engineered.
+function normalizeGuess(str){
+  return String(str || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Called by the imposter's own client once they've been unmasked (status
+// "guessing"). Unlike the rest of the state machine this isn't host-gated:
+// the imposter is a normal authenticated lobby member and the rules already
+// let any member write the lobby doc, so no host-relay round trip is needed.
+async function submitImposterGuess(guessText, skip){
+  if (!app.code || !app.lobbyData || !app.lobbyData.reveal) return;
+  if (app.lobbyData.reveal.imposterUid !== app.uid) return;
+  try {
+    if (skip){
+      await withTimeout(updateDoc(lobbyRef(app.code), { status: "reveal" }), "Raten überspringen");
+    } else {
+      const realWord = app.lobbyData.reveal.realWord || "";
+      const guessValue = (guessText || "").trim();
+      const correct = normalizeGuess(guessValue) === normalizeGuess(realWord);
+      await withTimeout(updateDoc(lobbyRef(app.code), {
+        status: "reveal",
+        "reveal.imposterGuess": guessValue,
+        "reveal.imposterGuessCorrect": correct
+      }), "Wort raten");
+    }
+  } catch (e){
+    console.error(e);
+    showToast(`Raten hat nicht geklappt.${errDetail(e)}`);
+    const submitBtn = document.getElementById("submit-guess-btn");
+    const skipBtn = document.getElementById("skip-guess-btn");
+    if (submitBtn) submitBtn.disabled = false;
+    if (skipBtn) skipBtn.disabled = false;
   }
 }
 
@@ -1117,6 +1283,8 @@ function leaveLobby(){
   app.startMode = "menu";
   app.connLostLobby = false;
   app.connLostSecret = false;
+  app.editingOwnName = false;
+  app.editingOwnNameDraft = null;
   app.screen = "start";
   render();
 }
@@ -1165,6 +1333,9 @@ function render(){
     } else if (status === "voting"){
       el.innerHTML = renderVotingScreen();
       bindVotingEvents();
+    } else if (status === "guessing"){
+      el.innerHTML = renderGuessingScreen();
+      bindGuessingEvents();
     } else if (status === "reveal"){
       el.innerHTML = renderRevealScreen();
       bindRevealEvents();
@@ -1314,7 +1485,21 @@ function renderWaitingRoom(){
     .sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0))
     .map((uid) => {
       const isHostPlayer = uid === app.lobbyData.hostUid;
-      return `<li><span>${playerNameHtml(uid, players)}</span>${isHostPlayer ? '<span class="tag">Host</span>' : ''}</li>`;
+      const isMe = uid === app.uid;
+
+      if (isMe && app.editingOwnName){
+        const draft = app.editingOwnNameDraft !== null ? app.editingOwnNameDraft : (players[uid].name || "");
+        return `<li class="editing">
+          <input type="text" id="edit-name-input" class="edit-name-input" maxlength="20" autocomplete="off" value="${esc(draft)}">
+          <span class="li-actions">
+            <button type="button" class="icon-btn confirm" id="save-name-btn" aria-label="Namen speichern">✓</button>
+            <button type="button" class="icon-btn cancel" id="cancel-name-btn" aria-label="Abbrechen">✕</button>
+          </span>
+        </li>`;
+      }
+
+      const rightBits = `${isHostPlayer ? '<span class="tag">Host</span>' : ''}${isMe ? '<button type="button" class="icon-btn" id="edit-name-btn" aria-label="Namen ändern">✎</button>' : ''}`;
+      return `<li><span>${playerNameHtml(uid, players)}</span>${rightBits ? `<span class="li-actions">${rightBits}</span>` : ''}</li>`;
     }).join("");
 
   return `
@@ -1358,6 +1543,69 @@ function bindWaitingRoomEvents(){
   if (startBtn) startBtn.addEventListener("click", () => startRound(startBtn));
   if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
   bindSpicyToggleEvents();
+  bindNameEditEvents();
+}
+
+// Inline "edit my own name" control in the player list. app.editingOwnName
+// toggles which markup renderWaitingRoom() emits for the own list item;
+// app.editingOwnNameDraft mirrors the input's live value (updated on every
+// keystroke, no render() call) so an incidental full re-render mid-typing —
+// e.g. another player joining/leaving while editing — restores the text the
+// user was typing instead of snapping back to the old server-side name.
+function bindNameEditEvents(){
+  const editBtn = document.getElementById("edit-name-btn");
+  if (editBtn){
+    editBtn.addEventListener("click", () => {
+      app.editingOwnName = true;
+      app.editingOwnNameDraft = null;
+      render();
+    });
+  }
+
+  const input = document.getElementById("edit-name-input");
+  const saveBtn = document.getElementById("save-name-btn");
+  const cancelBtn = document.getElementById("cancel-name-btn");
+  if (!input) return;
+
+  setTimeout(() => { input.focus(); input.select(); }, 0);
+  input.addEventListener("input", () => { app.editingOwnNameDraft = input.value; });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); saveNameEdit(); }
+    else if (e.key === "Escape"){ e.preventDefault(); cancelNameEdit(); }
+  });
+
+  function saveNameEdit(){
+    const value = (input.value || "").trim();
+    if (!value){
+      showToast("Bitte gib einen Namen ein.");
+      return;
+    }
+    if (saveBtn) saveBtn.disabled = true;
+    if (cancelBtn) cancelBtn.disabled = true;
+    input.disabled = true;
+    renameSelf(value)
+      .then(() => {
+        app.editingOwnName = false;
+        app.editingOwnNameDraft = null;
+        render();
+      })
+      .catch((e) => {
+        console.error(e);
+        showToast(`Name konnte nicht geändert werden.${errDetail(e)}`);
+        if (saveBtn) saveBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        input.disabled = false;
+      });
+  }
+
+  function cancelNameEdit(){
+    app.editingOwnName = false;
+    app.editingOwnNameDraft = null;
+    render();
+  }
+
+  if (saveBtn) saveBtn.addEventListener("click", saveNameEdit);
+  if (cancelBtn) cancelBtn.addEventListener("click", cancelNameEdit);
 }
 
 function renderWordScreen(){
@@ -1443,6 +1691,8 @@ function renderVotingScreen(){
     </button>`;
   }).join("");
 
+  const allVoted = uids.length > 0 && votedCount >= uids.length;
+
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
@@ -1454,7 +1704,10 @@ function renderVotingScreen(){
       ${voteListHtml(votes, players)}
       <div class="spacer"></div>
       ${app.isHost
-        ? `<button class="btn btn-primary" id="evaluate-btn">Auswerten</button>`
+        ? (allVoted
+            ? `<button class="btn btn-primary" id="evaluate-btn">Auswerten</button>`
+            : `<button class="btn btn-primary" id="evaluate-btn" disabled>Auswerten</button>
+               <p class="hint-text">Wartet auf alle Stimmen (${votedCount}/${uids.length}) …</p>`)
         : `<p class="hint-text">Warte auf die Auswertung durch den Host …</p>`
       }
     </div>
@@ -1473,19 +1726,101 @@ function bindVotingEvents(){
   if (evalBtn) evalBtn.addEventListener("click", () => evaluateVotes(evalBtn));
 }
 
+// Only reached when the crewmates correctly picked the imposter
+// (reveal.groupCorrect === true) — the imposter gets one last shot at
+// guessing the real word before the result is locked in. The imposter's own
+// client shows the input; everyone else just waits, no spoilers on this
+// screen (realWord/hintWord only render on the final reveal screen).
+function renderGuessingScreen(){
+  const reveal = app.lobbyData.reveal || {};
+  const isImposter = reveal.imposterUid === app.uid;
+
+  if (!isImposter){
+    return `
+      <div class="screen">
+        <div class="brand"><strong>🕵️ Imposter</strong></div>
+        ${connStatusHtml()}
+        <div class="loading-stage">${esc(reveal.imposterName || "Der Imposter")} wurde enttarnt und bekommt eine letzte Chance, das Wort zu erraten …</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="screen">
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
+      <div class="reveal-stage" style="flex: 0 0 auto; margin-bottom: 8px;">
+        <div class="reveal-eyebrow">Du wurdest enttarnt!</div>
+        <div class="the-word" style="font-size: clamp(1.6rem, 7vw, 2.4rem);">Kennst du das echte Wort?</div>
+        <p class="imposter-note">Errätst du es, gewinnst du trotzdem. Falls nicht, haben die Crewmates gewonnen.</p>
+      </div>
+      <div>
+        <label for="guess-input">Deine Vermutung</label>
+        <input type="text" id="guess-input" placeholder="Echtes Wort …" maxlength="40" autocomplete="off">
+      </div>
+      <p class="error-text" id="guess-error"></p>
+      <div class="spacer"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="submit-guess-btn">Wort abschicken</button>
+        <button class="btn btn-ghost" id="skip-guess-btn">Ich weiß es nicht</button>
+      </div>
+    </div>
+  `;
+}
+
+function bindGuessingEvents(){
+  const submitBtn = document.getElementById("submit-guess-btn");
+  const skipBtn = document.getElementById("skip-guess-btn");
+  const input = document.getElementById("guess-input");
+
+  if (submitBtn){
+    submitBtn.addEventListener("click", () => {
+      const value = (input && input.value || "").trim();
+      if (!value){
+        const err = document.getElementById("guess-error");
+        if (err) err.textContent = "Bitte gib ein Wort ein oder wähle „Ich weiß es nicht“.";
+        return;
+      }
+      submitBtn.disabled = true;
+      if (skipBtn) skipBtn.disabled = true;
+      submitImposterGuess(value, false);
+    });
+  }
+  if (skipBtn){
+    skipBtn.addEventListener("click", () => {
+      skipBtn.disabled = true;
+      if (submitBtn) submitBtn.disabled = true;
+      submitImposterGuess(null, true);
+    });
+  }
+}
+
 function renderRevealScreen(){
   const reveal = app.lobbyData.reveal || {};
   const players = app.lobbyData.players || {};
   const votes = app.lobbyData.votes || {};
   const voteCounts = reveal.voteCounts || {};
 
+  // Always a binary result now — no more neutral "no clear verdict" outcome.
+  // A tie / no unique suspect counts as a straight imposter win, same as
+  // picking the wrong person. The only way crewmates win is a clean, unique
+  // pick of the real imposter AND (if it came to that) the imposter failing
+  // or skipping their comeback guess.
+  const imposterLabel = esc(reveal.imposterName || "Der Imposter");
   let verdictHtml;
-  if (reveal.groupPickUid && reveal.groupCorrect === true){
-    verdictHtml = `<p class="verdict-banner verdict-ok">🎉 Ihr habt den Imposter erwischt!</p>`;
-  } else if (reveal.groupPickUid && reveal.groupCorrect === false){
-    verdictHtml = `<p class="verdict-banner verdict-bad">😈 Der Imposter ist durchgekommen! Die Gruppe hat ${esc(reveal.groupPickName || "jemand anderen")} verdächtigt.</p>`;
+  if (reveal.groupCorrect === true){
+    if (reveal.imposterGuessCorrect === true){
+      verdictHtml = `<p class="verdict-banner verdict-bad">😈 Imposter gewinnt! ${imposterLabel} wurde enttarnt, hat aber „${esc(reveal.imposterGuess || "")}“ richtig erraten.</p>`;
+    } else {
+      const guessNote = reveal.imposterGuess
+        ? ` ${imposterLabel} hat noch „${esc(reveal.imposterGuess)}“ geraten – falsch.`
+        : "";
+      verdictHtml = `<p class="verdict-banner verdict-ok">🎉 Crewmates gewinnen! Ihr habt ${imposterLabel} erwischt.${guessNote}</p>`;
+    }
+  } else if (reveal.groupPickUid){
+    verdictHtml = `<p class="verdict-banner verdict-bad">😈 Imposter gewinnt! Die Gruppe hat fälschlicherweise ${esc(reveal.groupPickName || "jemand anderen")} verdächtigt.</p>`;
   } else {
-    verdictHtml = `<p class="verdict-banner verdict-neutral">🤷 Kein eindeutiger Verdacht — der Imposter kommt so oder so durch.</p>`;
+    verdictHtml = `<p class="verdict-banner verdict-bad">😈 Imposter gewinnt! Kein eindeutiger Verdacht in der Gruppe.</p>`;
   }
 
   // voteCounts (host-computed at evaluation) is the source of truth for the
