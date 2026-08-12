@@ -216,6 +216,21 @@
     padding: 4px 8px;
     border-radius: 999px;
   }
+  .online-dot{
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background: var(--text-dim);
+    opacity: 0.35;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .online-dot.online{
+    background: var(--ok);
+    opacity: 1;
+  }
   .section-title{
     font-size: 0.8rem;
     font-weight: 700;
@@ -489,6 +504,14 @@ const secretRef = (code, uid) => doc(db, "lobbies", code, "secrets", uid);
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no O, I, 0, 1
 const MAX_PLAYERS = 12;
 const MIN_PLAYERS = 3;
+// Firestore has no built-in presence system (unlike the Realtime Database),
+// so "who's actually still here" is faked with a heartbeat: every player
+// still in a lobby writes their own lastSeen timestamp on an interval, and
+// anyone whose timestamp is too old is treated as offline. The threshold is
+// deliberately more than 2x the heartbeat interval to absorb normal network
+// jitter without flickering the dot on and off.
+const HEARTBEAT_INTERVAL_MS = 10000;
+const ONLINE_THRESHOLD_MS = 20000;
 
 const WORD_PAIRS = [
   ["Kaffee","Tee"], ["Hund","Katze"], ["Meer","See"], ["Pizza","Pasta"],
@@ -592,6 +615,19 @@ function esc(str){
   }[c]));
 }
 
+function isPlayerOnline(player){
+  if (!player || !player.lastSeen) return false;
+  return (Date.now() - player.lastSeen) < ONLINE_THRESHOLD_MS;
+}
+
+// Small dot + escaped name, used everywhere a player name shows up in a list
+// so the online/offline state reads consistently across screens.
+function playerNameHtml(uid, players){
+  const p = (players && players[uid]) || {};
+  const online = isPlayerOnline(p);
+  return `<span class="online-dot ${online ? "online" : ""}"></span>${esc(p.name || "?")}`;
+}
+
 function generateCode(){
   let out = "";
   for (let i = 0; i < 4; i++){
@@ -669,6 +705,39 @@ function ensureDiscussionTimer(){
     const s = String(elapsed % 60).padStart(2, "0");
     el.textContent = `${m}:${s}`;
   }, 1000);
+}
+
+// Heartbeat: while a player is in a lobby, periodically stamp their own
+// players.{uid}.lastSeen so everyone else can tell they're still actually
+// here (vs. just still listed in the players map from whenever they joined).
+// startHeartbeat() always clears any previous handle first, so calling
+// enterLobby() more than once can never stack up parallel intervals.
+let heartbeatHandle = null;
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatHandle = setInterval(() => {
+    if (!app.code || !app.uid) return;
+    updateDoc(lobbyRef(app.code), { [`players.${app.uid}.lastSeen`]: Date.now() })
+      .catch((e) => console.error("Heartbeat fehlgeschlagen:", e));
+  }, HEARTBEAT_INTERVAL_MS);
+}
+function stopHeartbeat(){
+  if (heartbeatHandle){ clearInterval(heartbeatHandle); heartbeatHandle = null; }
+}
+
+// Online/offline is computed from lastSeen vs. Date.now() at render time, so
+// it needs to be re-evaluated even when no new Firestore snapshot comes in
+// (otherwise a dot would just freeze "online" forever once the last event
+// arrived). This ticks a re-render every 5s, only while actually in a lobby.
+let presenceTickHandle = null;
+function startPresenceTick(){
+  stopPresenceTick();
+  presenceTickHandle = setInterval(() => {
+    if (app.screen === "in-lobby") render();
+  }, 5000);
+}
+function stopPresenceTick(){
+  if (presenceTickHandle){ clearInterval(presenceTickHandle); presenceTickHandle = null; }
 }
 
 // ---------- Auth ----------
@@ -755,7 +824,7 @@ async function createLobby(btn){
     await withTimeout(setDoc(lobbyRef(code), {
       hostUid: app.uid,
       status: "lobby",
-      players: { [app.uid]: { name, joinedAt: Date.now() } },
+      players: { [app.uid]: { name, joinedAt: Date.now(), lastSeen: Date.now() } },
       round: 0,
       spicyEnabled: false,
       createdAt: serverTimestamp()
@@ -788,7 +857,7 @@ async function joinLobby(btn){
     if (data.status !== "lobby"){ setStartError("Diese Runde läuft schon."); btn.disabled = false; btn.textContent = originalText; return; }
     const count = Object.keys(data.players || {}).length;
     if (count >= MAX_PLAYERS){ setStartError("Die Lobby ist voll."); btn.disabled = false; btn.textContent = originalText; return; }
-    await withTimeout(updateDoc(lobbyRef(code), { [`players.${app.uid}`]: { name, joinedAt: Date.now() } }), "Beitreten");
+    await withTimeout(updateDoc(lobbyRef(code), { [`players.${app.uid}`]: { name, joinedAt: Date.now(), lastSeen: Date.now() } }), "Beitreten");
     enterLobby(code);
   } catch (e){
     console.error(e);
@@ -808,6 +877,8 @@ function enterLobby(code){
   app.connLostSecret = false;
   subscribeLobby(code);
   subscribeSecret(code, app.uid);
+  startHeartbeat();
+  startPresenceTick();
 }
 
 // onSnapshot's error callback (2nd/3rd arg) is what surfaces dropped
@@ -1029,6 +1100,8 @@ async function evaluateVotes(btn){
 
 function leaveLobby(){
   stopDiscussionTimer();
+  stopHeartbeat();
+  stopPresenceTick();
   if (app.unsubLobby){ app.unsubLobby(); app.unsubLobby = null; }
   if (app.unsubSecret){ app.unsubSecret(); app.unsubSecret = null; }
   if (app.code && app.uid){
@@ -1241,7 +1314,7 @@ function renderWaitingRoom(){
     .sort((a, b) => (players[a].joinedAt || 0) - (players[b].joinedAt || 0))
     .map((uid) => {
       const isHostPlayer = uid === app.lobbyData.hostUid;
-      return `<li><span>${esc(players[uid].name)}</span>${isHostPlayer ? '<span class="tag">Host</span>' : ''}</li>`;
+      return `<li><span>${playerNameHtml(uid, players)}</span>${isHostPlayer ? '<span class="tag">Host</span>' : ''}</li>`;
     }).join("");
 
   return `
@@ -1335,6 +1408,23 @@ function bindDiscussionEvents(){
   if (startVotingBtn) startVotingBtn.addEventListener("click", () => startVoting(startVotingBtn));
 }
 
+// Shared between the voting screen (live, updates as votes come in via the
+// lobby's onSnapshot listener) and the reveal screen (final state). Voting
+// stays changeable the whole time — this just reflects whatever the current
+// votes map says, so it naturally follows someone changing their mind.
+function voteListHtml(votes, players){
+  const voterUids = Object.keys(votes);
+  if (!voterUids.length) return "";
+  return `
+    <div class="section-title">Wer hat wen verdächtigt</div>
+    <div class="card">${voterUids.map((voterUid) => {
+      const suspectUid = votes[voterUid];
+      const suspectName = players[suspectUid] ? players[suspectUid].name : "?";
+      return `<div class="tally-row"><span>${playerNameHtml(voterUid, players)}</span><span>→ ${esc(suspectName)}</span></div>`;
+    }).join("")}</div>
+  `;
+}
+
 function renderVotingScreen(){
   const players = app.lobbyData.players || {};
   const uids = Object.keys(players);
@@ -1348,7 +1438,7 @@ function renderVotingScreen(){
   const items = suspectUids.map((uid) => {
     const voted = myVote === uid;
     return `<button class="vote-btn ${voted ? "voted" : ""}" data-uid="${esc(uid)}">
-      <span>${esc(players[uid].name)}</span>
+      <span>${playerNameHtml(uid, players)}</span>
       <span class="vote-check">✓</span>
     </button>`;
   }).join("");
@@ -1361,6 +1451,7 @@ function renderVotingScreen(){
       <p class="hint-text">Tippt euch auf eine Person ein. Du kannst deine Wahl ändern, solange der Host noch nicht ausgewertet hat.</p>
       <div>${items}</div>
       <p class="hint-text">${votedCount}/${uids.length} haben abgestimmt</p>
+      ${voteListHtml(votes, players)}
       <div class="spacer"></div>
       ${app.isHost
         ? `<button class="btn btn-primary" id="evaluate-btn">Auswerten</button>`
@@ -1405,26 +1496,16 @@ function renderRevealScreen(){
     .filter((uid) => players[uid])
     .sort((a, b) => (voteCounts[b] || 0) - (voteCounts[a] || 0))
     .map((uid) => {
-      const name = players[uid] ? players[uid].name : "?";
       const isImp = uid === reveal.imposterUid;
       const isPick = uid === reveal.groupPickUid;
       const count = voteCounts[uid] || 0;
       return `<div class="tally-row ${isImp ? "is-imposter" : ""}">
-        <span>${esc(name)}${isImp ? " 🕵️" : ""}${isPick ? " 👉" : ""}</span>
+        <span>${playerNameHtml(uid, players)}${isImp ? " 🕵️" : ""}${isPick ? " 👉" : ""}</span>
         <span>${count} Stimme${count === 1 ? "" : "n"}</span>
       </div>`;
     }).join("");
 
-  const voterUids = Object.keys(votes);
-  const whoVotedWhomHtml = voterUids.length ? `
-    <div class="section-title">Wer hat wen verdächtigt</div>
-    <div class="card">${voterUids.map((voterUid) => {
-      const voterName = players[voterUid] ? players[voterUid].name : "?";
-      const suspectUid = votes[voterUid];
-      const suspectName = players[suspectUid] ? players[suspectUid].name : "?";
-      return `<div class="tally-row"><span>${esc(voterName)}</span><span>→ ${esc(suspectName)}</span></div>`;
-    }).join("")}</div>
-  ` : "";
+  const whoVotedWhomHtml = voteListHtml(votes, players);
 
   return `
     <div class="screen">
