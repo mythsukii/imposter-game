@@ -367,6 +367,26 @@
     letter-spacing: 0.05em;
   }
 
+  .conn-status{
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin: -4px 0 10px;
+    letter-spacing: 0.02em;
+  }
+  .conn-status.offline{ color: var(--danger); }
+  .error-detail{
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-align: center;
+    opacity: 0.75;
+    word-break: break-word;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
   #toast{
     position: fixed;
     left: 50%;
@@ -477,10 +497,34 @@ const app = {
   lastSeenRound: -1,
   unsubLobby: null,
   unsubSecret: null,
-  screen: "loading", // 'loading' | 'start' | 'in-lobby'
+  screen: "loading", // 'loading' | 'auth-error' | 'start' | 'in-lobby'
   startMode: "menu", // 'menu' | 'join'
-  currentRoundSecret: null
+  currentRoundSecret: null,
+  online: (typeof navigator !== "undefined" ? navigator.onLine : true),
+  connLostLobby: false,
+  connLostSecret: false,
+  authErrorDetail: ""
 };
+
+// Client-side timeout wrapper: Firestore calls have no built-in short timeout,
+// so a bad connection can leave a request hanging indefinitely with the UI
+// stuck on "Trete bei …" etc. This forces a clear failure after FIRESTORE_TIMEOUT_MS.
+const FIRESTORE_TIMEOUT_MS = 12000;
+function withTimeout(promise, label){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => {
+      const err = new Error(`Verbindung dauert ungewöhnlich lange (${label})`);
+      err.code = "client-timeout";
+      reject(err);
+    }, FIRESTORE_TIMEOUT_MS))
+  ]);
+}
+
+function errDetail(e){
+  const detail = (e && (e.code || e.message)) || "";
+  return detail ? ` (${detail})` : "";
+}
 
 let discussionTimerHandle = null;
 let discussionTimerStart = null;
@@ -505,18 +549,67 @@ function ensureDiscussionTimer(){
 }
 
 // ---------- Auth ----------
+// Runs entirely before the user can click anything: the "start" screen only
+// renders once app.uid is set, so createLobby/joinLobby can't fire on a null
+// uid during normal use. What CAN happen on flaky party wifi is
+// signInAnonymously() failing outright (not just being slow) — previously that
+// only logged to the console and left everyone stuck on "Lädt …" forever with
+// no way to recover short of a manual reload. Now it retries with backoff and,
+// if it keeps failing, shows a visible error screen with a retry button.
+let authAttempts = 0;
+let authRetryTimer = null;
+let authInFlight = false;
+
+function attemptSignIn(){
+  if (authInFlight) return;
+  authInFlight = true;
+  if (authRetryTimer){ clearTimeout(authRetryTimer); authRetryTimer = null; }
+  signInAnonymously(auth)
+    .then(() => { authInFlight = false; })
+    .catch((e) => {
+      authInFlight = false;
+      console.error(e);
+      authAttempts++;
+      app.authErrorDetail = `${e.code || e.message || "Unbekannter Fehler"}`;
+      if (authAttempts < 4){
+        authRetryTimer = setTimeout(attemptSignIn, Math.min(1500 * authAttempts, 6000));
+      } else if (!app.uid){
+        app.screen = "auth-error";
+        render();
+      }
+    });
+}
+
 onAuthStateChanged(auth, (user) => {
   if (user){
+    authAttempts = 0;
     app.uid = user.uid;
     app.name = localStorage.getItem("imposter_name") || "";
-    app.screen = "start";
-    render();
+    if (app.screen === "loading" || app.screen === "auth-error"){
+      app.screen = "start";
+      render();
+    }
+  } else if (!app.uid){
+    attemptSignIn();
   }
 });
-signInAnonymously(auth).catch((e) => {
-  console.error(e);
-  showToast("Anmeldung fehlgeschlagen. Lade die Seite neu.");
-});
+attemptSignIn();
+
+if (typeof window !== "undefined"){
+  window.addEventListener("offline", () => {
+    app.online = false;
+    render();
+  });
+  window.addEventListener("online", () => {
+    app.online = true;
+    showToast("Verbindung wiederhergestellt.");
+    if (app.screen === "in-lobby" && app.code){
+      subscribeLobby(app.code);
+      subscribeSecret(app.code, app.uid);
+    }
+    render();
+  });
+}
 
 // ---------- Actions ----------
 async function createLobby(btn){
@@ -532,21 +625,21 @@ async function createLobby(btn){
     let code = null;
     for (let attempt = 0; attempt < 6; attempt++){
       const candidate = generateCode();
-      const existing = await getDoc(lobbyRef(candidate));
+      const existing = await withTimeout(getDoc(lobbyRef(candidate)), "Code prüfen");
       if (!existing.exists()){ code = candidate; break; }
     }
     if (!code){ throw new Error("no-code"); }
-    await setDoc(lobbyRef(code), {
+    await withTimeout(setDoc(lobbyRef(code), {
       hostUid: app.uid,
       status: "lobby",
       players: { [app.uid]: { name, joinedAt: Date.now() } },
       round: 0,
       createdAt: serverTimestamp()
-    });
+    }), "Lobby anlegen");
     enterLobby(code);
   } catch (e){
     console.error(e);
-    setStartError("Lobby konnte nicht erstellt werden. Versuch's nochmal.");
+    setStartError(`Lobby konnte nicht erstellt werden.${errDetail(e)} Versuch's nochmal.`);
     btn.disabled = false;
     btn.textContent = originalText;
   }
@@ -565,17 +658,17 @@ async function joinLobby(btn){
   const originalText = btn.textContent;
   btn.textContent = "Trete bei …";
   try {
-    const snap = await getDoc(lobbyRef(code));
+    const snap = await withTimeout(getDoc(lobbyRef(code)), "Lobby suchen");
     if (!snap.exists()){ setStartError("Diese Lobby gibt es nicht."); btn.disabled = false; btn.textContent = originalText; return; }
     const data = snap.data();
     if (data.status !== "lobby"){ setStartError("Diese Runde läuft schon."); btn.disabled = false; btn.textContent = originalText; return; }
     const count = Object.keys(data.players || {}).length;
     if (count >= MAX_PLAYERS){ setStartError("Die Lobby ist voll."); btn.disabled = false; btn.textContent = originalText; return; }
-    await updateDoc(lobbyRef(code), { [`players.${app.uid}`]: { name, joinedAt: Date.now() } });
+    await withTimeout(updateDoc(lobbyRef(code), { [`players.${app.uid}`]: { name, joinedAt: Date.now() } }), "Beitreten");
     enterLobby(code);
   } catch (e){
     console.error(e);
-    setStartError("Beitreten hat nicht geklappt. Versuch's nochmal.");
+    setStartError(`Beitreten hat nicht geklappt.${errDetail(e)} Versuch's nochmal.`);
     btn.disabled = false;
     btn.textContent = originalText;
   }
@@ -587,14 +680,22 @@ function enterLobby(code){
   app.lastSeenRound = -1;
   app.localPhase = "word";
   app.currentRoundSecret = null;
+  app.connLostLobby = false;
+  app.connLostSecret = false;
   subscribeLobby(code);
   subscribeSecret(code, app.uid);
 }
 
+// onSnapshot's error callback (2nd/3rd arg) is what surfaces dropped
+// connections, revoked permissions etc. Without it a listener that fails just
+// goes silent — the UI stays frozen on whatever it last rendered with no
+// indication anything is wrong. Here we surface it (toast, once, not spammed
+// on every retry) and keep retrying so a real party-wifi blip self-heals.
 function subscribeLobby(code){
   if (app.unsubLobby) app.unsubLobby();
   app.unsubLobby = onSnapshot(lobbyRef(code), (snap) => {
-    if (!snap.exists()){ return; }
+    app.connLostLobby = false;
+    if (!snap.exists()){ render(); return; }
     const data = snap.data();
     app.lobbyData = data;
     app.isHost = data.hostUid === app.uid;
@@ -603,15 +704,32 @@ function subscribeLobby(code){
       app.lastSeenRound = data.round;
     }
     render();
-  }, (err) => { console.error(err); });
+  }, (err) => {
+    console.error(err);
+    if (!app.connLostLobby){
+      showToast(`Verbindung zur Lobby unterbrochen${errDetail(err)}. Versuche erneut …`);
+    }
+    app.connLostLobby = true;
+    render();
+    setTimeout(() => { if (app.code === code) subscribeLobby(code); }, 3000);
+  });
 }
 
 function subscribeSecret(code, uid){
   if (app.unsubSecret) app.unsubSecret();
   app.unsubSecret = onSnapshot(secretRef(code, uid), (snap) => {
+    app.connLostSecret = false;
     app.secretData = snap.exists() ? snap.data() : null;
     render();
-  }, (err) => { console.error(err); });
+  }, (err) => {
+    console.error(err);
+    if (!app.connLostSecret){
+      showToast(`Verbindung zu deinem Wort unterbrochen${errDetail(err)}. Versuche erneut …`);
+    }
+    app.connLostSecret = true;
+    render();
+    setTimeout(() => { if (app.code === code && app.uid === uid) subscribeSecret(code, uid); }, 3000);
+  });
 }
 
 function goToDiscussion(){
@@ -623,6 +741,7 @@ async function startRound(btn){
   if (!app.isHost || !app.lobbyData) return;
   const players = Object.keys(app.lobbyData.players || {});
   if (players.length < MIN_PLAYERS) return;
+  const originalText = btn ? btn.textContent : "Spiel starten";
   if (btn){ btn.disabled = true; btn.textContent = "Starte Runde …"; }
   try {
     const pair = WORD_PAIRS[Math.floor(Math.random() * WORD_PAIRS.length)];
@@ -633,40 +752,44 @@ async function startRound(btn){
     const imposterName = (app.lobbyData.players[imposterUid] || {}).name || "?";
     const nextRound = (app.lobbyData.round || 0) + 1;
 
-    await Promise.all(players.map((uid) => {
+    await withTimeout(Promise.all(players.map((uid) => {
       const isImposter = uid === imposterUid;
       return setDoc(secretRef(app.code, uid), {
         word: isImposter ? hintWord : mainWord,
         isImposter
       });
-    }));
+    })), "Wörter verteilen");
 
     app.currentRoundSecret = { round: nextRound, imposterUid, imposterName, realWord: mainWord, hintWord };
     try {
       localStorage.setItem(`imposter_hostsecret_${app.code}`, JSON.stringify(app.currentRoundSecret));
     } catch (e){ /* ignore storage errors */ }
 
-    await updateDoc(lobbyRef(app.code), {
+    await withTimeout(updateDoc(lobbyRef(app.code), {
       status: "playing",
       round: increment(1),
       reveal: deleteField(),
       votes: {}
-    });
+    }), "Runde starten");
   } catch (e){
     console.error(e);
-    showToast("Runde konnte nicht gestartet werden.");
-    if (btn){ btn.disabled = false; btn.textContent = "Spiel starten"; }
+    showToast(`Runde konnte nicht gestartet werden.${errDetail(e)}`);
+    if (btn){ btn.disabled = false; btn.textContent = originalText; }
   }
 }
 
+let voteInFlight = false;
 async function castVote(votedUid, el){
-  if (!app.code || !app.uid) return;
+  if (!app.code || !app.uid || voteInFlight) return;
+  voteInFlight = true;
   try {
     if (el) el.classList.add("voted");
-    await updateDoc(lobbyRef(app.code), { [`votes.${app.uid}`]: votedUid });
+    await withTimeout(updateDoc(lobbyRef(app.code), { [`votes.${app.uid}`]: votedUid }), "Stimme abgeben");
   } catch (e){
     console.error(e);
-    showToast("Stimme konnte nicht gespeichert werden.");
+    showToast(`Stimme konnte nicht gespeichert werden.${errDetail(e)}`);
+  } finally {
+    voteInFlight = false;
   }
 }
 
@@ -688,7 +811,7 @@ async function revealRound(btn){
   }
   if (btn){ btn.disabled = true; btn.textContent = "Löse auf …"; }
   try {
-    await updateDoc(lobbyRef(app.code), {
+    await withTimeout(updateDoc(lobbyRef(app.code), {
       status: "reveal",
       reveal: {
         imposterUid: secret.imposterUid,
@@ -696,10 +819,10 @@ async function revealRound(btn){
         realWord: secret.realWord,
         hintWord: secret.hintWord
       }
-    });
+    }), "Auflösen");
   } catch (e){
     console.error(e);
-    showToast("Auflösen hat nicht geklappt.");
+    showToast(`Auflösen hat nicht geklappt.${errDetail(e)}`);
     if (btn){ btn.disabled = false; btn.textContent = "Auflösen"; }
   }
 }
@@ -709,7 +832,8 @@ function leaveLobby(){
   if (app.unsubLobby){ app.unsubLobby(); app.unsubLobby = null; }
   if (app.unsubSecret){ app.unsubSecret(); app.unsubSecret = null; }
   if (app.code && app.uid){
-    updateDoc(lobbyRef(app.code), { [`players.${app.uid}`]: deleteField() }).catch((e) => console.error(e));
+    updateDoc(lobbyRef(app.code), { [`players.${app.uid}`]: deleteField() })
+      .catch((e) => console.error("Konnte Spieler beim Verlassen nicht entfernen:", e));
   }
   app.code = null;
   app.lobbyData = null;
@@ -718,6 +842,8 @@ function leaveLobby(){
   app.currentRoundSecret = null;
   app.localPhase = "word";
   app.startMode = "menu";
+  app.connLostLobby = false;
+  app.connLostSecret = false;
   app.screen = "start";
   render();
 }
@@ -735,7 +861,12 @@ function render(){
   }
 
   if (app.screen === "loading"){
-    el.innerHTML = renderLoading();
+    el.innerHTML = renderLoading("Verbinde …");
+    return;
+  }
+  if (app.screen === "auth-error"){
+    el.innerHTML = renderAuthError();
+    bindAuthErrorEvents();
     return;
   }
   if (app.screen === "start"){
@@ -744,7 +875,7 @@ function render(){
     return;
   }
   if (app.screen === "in-lobby"){
-    if (!app.lobbyData){ el.innerHTML = renderLoading(); return; }
+    if (!app.lobbyData){ el.innerHTML = renderLoading("Lade Lobby …"); return; }
     const status = app.lobbyData.status;
     if (status === "lobby"){
       el.innerHTML = renderWaitingRoom();
@@ -765,8 +896,43 @@ function render(){
   }
 }
 
-function renderLoading(){
-  return `<div class="screen"><div class="loading-stage">Lädt …</div></div>`;
+function renderLoading(msg){
+  return `<div class="screen"><div class="loading-stage">${esc(msg || "Lädt …")}</div></div>`;
+}
+
+function renderAuthError(){
+  return `
+    <div class="screen">
+      <div class="spacer"></div>
+      <div class="brand"><strong>🕵️ Imposter</strong></div>
+      <div class="center-col" style="flex:0; gap:14px; text-align:center;">
+        <p class="hint-text">Verbindung zum Server hat nicht geklappt.</p>
+        <p class="error-detail">${esc(app.authErrorDetail || "")}</p>
+        <button class="btn btn-primary" id="retry-auth-btn">Nochmal versuchen</button>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  `;
+}
+
+function bindAuthErrorEvents(){
+  const btn = document.getElementById("retry-auth-btn");
+  if (btn) btn.addEventListener("click", () => {
+    authAttempts = 0;
+    app.screen = "loading";
+    render();
+    attemptSignIn();
+  });
+}
+
+function connStatusHtml(){
+  if (!app.online){
+    return `<p class="conn-status offline">Keine Internetverbindung</p>`;
+  }
+  if (app.connLostLobby || app.connLostSecret){
+    return `<p class="conn-status">Verbindung wird wiederhergestellt …</p>`;
+  }
+  return "";
 }
 
 function renderStart(){
@@ -856,6 +1022,7 @@ function renderWaitingRoom(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
       <div class="code-display">
         <div class="label">Lobby-Code</div>
         <div class="code">${esc(app.code)}</div>
@@ -902,6 +1069,7 @@ function renderWordScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
       <div class="word-stage">
         <div class="word-eyebrow ${isImposter ? "imposter" : ""}">${isImposter ? "Dein Hinweiswort" : "Dein Wort"}</div>
         <div class="the-word">${esc(secret.word)}</div>
@@ -934,6 +1102,7 @@ function renderDiscussionScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
       <div class="timer" id="timer-display">00:00</div>
       <p class="hint-text">Stellt euch reihum Fragen. Wer wirkt komisch?</p>
       <div class="section-title">Tippe optional auf deinen Verdacht</div>
@@ -994,6 +1163,7 @@ function renderRevealScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${connStatusHtml()}
       <div class="reveal-stage">
         <div class="reveal-eyebrow">Der Imposter war</div>
         <div class="reveal-name">${esc(reveal.imposterName || "?")}</div>
