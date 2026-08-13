@@ -67,6 +67,21 @@
   }
   .brand strong{ color: var(--text); }
 
+  .code-badge{
+    position: fixed;
+    top: max(14px, env(safe-area-inset-top));
+    right: 16px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 5px 9px;
+    border-radius: 8px;
+    z-index: 40;
+  }
+
   .spacer{ flex: 1; }
   .center-col{
     flex: 1;
@@ -1372,6 +1387,15 @@ function bindAuthErrorEvents(){
   });
 }
 
+// Shown on every in-lobby screen except the waiting room (which already has
+// the code big and prominent) — a small always-visible fallback so that if
+// someone gets disconnected/kicked mid-round, the code to rejoin is right
+// there instead of only living in the host's memory or an old chat message.
+function codeBadgeHtml(){
+  if (!app.code) return "";
+  return `<button type="button" class="code-badge" id="code-badge-btn" title="Code kopieren">${esc(app.code)}</button>`;
+}
+
 function connStatusHtml(){
   if (!app.online){
     return `<p class="conn-status offline">Keine Internetverbindung</p>`;
@@ -1617,6 +1641,7 @@ function renderWordScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="word-stage">
         <div class="word-eyebrow ${isImposter ? "imposter" : ""}">${isImposter ? "Dein Hinweiswort" : "Dein Wort"}</div>
@@ -1638,6 +1663,7 @@ function renderDiscussionScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="timer" id="timer-display">00:00</div>
       ${app.lobbyData.starterName ? `<p class="hint-text">🎤 ${esc(app.lobbyData.starterName)} fängt an zu fragen</p>` : ""}
@@ -1696,6 +1722,7 @@ function renderVotingScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="section-title">Wer ist der Imposter?</div>
       <p class="hint-text">Tippt euch auf eine Person ein. Du kannst deine Wahl ändern, solange der Host noch nicht ausgewertet hat.</p>
@@ -1739,6 +1766,7 @@ function renderGuessingScreen(){
     return `
       <div class="screen">
         <div class="brand"><strong>🕵️ Imposter</strong></div>
+        ${codeBadgeHtml()}
         ${connStatusHtml()}
         <div class="loading-stage">${esc(reveal.imposterName || "Der Imposter")} wurde enttarnt und bekommt eine letzte Chance, das Wort zu erraten …</div>
       </div>
@@ -1748,6 +1776,7 @@ function renderGuessingScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="reveal-stage" style="flex: 0 0 auto; margin-bottom: 8px;">
         <div class="reveal-eyebrow">Du wurdest enttarnt!</div>
@@ -1845,6 +1874,7 @@ function renderRevealScreen(){
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
+      ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="reveal-stage">
         <div class="reveal-eyebrow">Der Imposter war</div>
@@ -1881,6 +1911,17 @@ function bindRevealEvents(){
   if (leaveBtn) leaveBtn.addEventListener("click", leaveLobby);
   bindSpicyToggleEvents();
 }
+
+// Delegated once on the persistent #app container (unlike the screen content,
+// this element itself survives every re-render), so the fixed-position code
+// badge stays tappable-to-copy no matter which screen renders it.
+document.getElementById("app").addEventListener("click", (ev) => {
+  const badge = ev.target.closest("#code-badge-btn");
+  if (!badge || !app.code) return;
+  navigator.clipboard.writeText(app.code)
+    .then(() => showToast("Code kopiert!"))
+    .catch(() => showToast(`Code: ${app.code}`));
+});
 
 render();
 </script>
