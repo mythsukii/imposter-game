@@ -931,6 +931,7 @@ async function createLobby(btn){
       players: { [app.uid]: { name, joinedAt: Date.now(), lastSeen: Date.now() } },
       round: 0,
       spicyEnabled: false,
+      hintWordEnabled: true,
       createdAt: serverTimestamp()
     }), "Lobby anlegen");
     enterLobby(code);
@@ -1070,11 +1071,14 @@ async function startRound(btn){
     const starterUid = players[Math.floor(Math.random() * players.length)];
     const starterName = (app.lobbyData.players[starterUid] || {}).name || "?";
     const nextRound = (app.lobbyData.round || 0) + 1;
+    // Default true so lobbies created before this field existed keep the
+    // familiar behavior instead of silently going hint-less.
+    const hintWordEnabled = app.lobbyData.hintWordEnabled !== false;
 
     await withTimeout(Promise.all(players.map((uid) => {
       const isImposter = uid === imposterUid;
       return setDoc(secretRef(app.code, uid), {
-        word: isImposter ? hintWord : mainWord,
+        word: isImposter ? (hintWordEnabled ? hintWord : null) : mainWord,
         isImposter
       });
     })), "Wörter verteilen");
@@ -1103,6 +1107,16 @@ async function toggleSpicy(checked){
   if (!app.isHost || !app.code) return;
   try {
     await withTimeout(updateDoc(lobbyRef(app.code), { spicyEnabled: checked }), "Spicy-Einstellung speichern");
+  } catch (e){
+    console.error(e);
+    showToast(`Einstellung konnte nicht gespeichert werden.${errDetail(e)}`);
+  }
+}
+
+async function toggleHintWord(checked){
+  if (!app.isHost || !app.code) return;
+  try {
+    await withTimeout(updateDoc(lobbyRef(app.code), { hintWordEnabled: checked }), "Hinweiswort-Einstellung speichern");
   } catch (e){
     console.error(e);
     showToast(`Einstellung konnte nicht gespeichert werden.${errDetail(e)}`);
@@ -1500,9 +1514,27 @@ function spicySectionHtml(){
   return enabled ? `<p class="hint-text">🌶️ Spicy-Wörter (18+) sind für diese Runde aktiviert</p>` : "";
 }
 
+// Same host-only/read-only-for-others pattern as spicySectionHtml. Default
+// (unset on old lobbies) counts as enabled, matching the pre-toggle behavior.
+function hintWordSectionHtml(){
+  const enabled = !(app.lobbyData && app.lobbyData.hintWordEnabled === false);
+  if (app.isHost){
+    return `
+      <label class="spicy-toggle" for="hintword-toggle">
+        <input type="checkbox" id="hintword-toggle" ${enabled ? "checked" : ""}>
+        <span>💡 Imposter bekommt ein Hinweiswort</span>
+      </label>
+      <p class="spicy-hint">${enabled ? "Ausschalten macht's schwerer: Imposter bekommt dann gar kein Wort." : "Imposter bekommt aktuell kein Hinweiswort — reines Raten."}</p>
+    `;
+  }
+  return enabled ? "" : `<p class="hint-text">💡 Der Imposter bekommt diese Runde kein Hinweiswort</p>`;
+}
+
 function bindSpicyToggleEvents(){
   const toggle = document.getElementById("spicy-toggle");
   if (toggle) toggle.addEventListener("change", () => toggleSpicy(toggle.checked));
+  const hintToggle = document.getElementById("hintword-toggle");
+  if (hintToggle) hintToggle.addEventListener("change", () => toggleHintWord(hintToggle.checked));
 }
 
 function renderWaitingRoom(){
@@ -1544,6 +1576,7 @@ function renderWaitingRoom(){
       <div class="section-title">Spieler (${count})</div>
       <ul class="player-list">${listItems || ""}</ul>
       ${spicySectionHtml()}
+      ${hintWordSectionHtml()}
       <div class="spacer"></div>
       ${app.isHost
         ? `<button class="btn btn-primary" id="start-round-btn" ${canStart ? "" : "disabled"}>Spiel starten</button>
@@ -1644,15 +1677,16 @@ function renderWordScreen(){
     return `<div class="screen"><div class="loading-stage">Wort wird geladen …</div></div>`;
   }
   const isImposter = !!secret.isImposter;
+  const hasHintWord = isImposter && !!secret.word;
   return `
     <div class="screen">
       <div class="brand"><strong>🕵️ Imposter</strong></div>
       ${codeBadgeHtml()}
       ${connStatusHtml()}
       <div class="word-stage">
-        <div class="word-eyebrow ${isImposter ? "imposter" : ""}">${isImposter ? "Dein Hinweiswort" : "Dein Wort"}</div>
-        <div class="the-word">${esc(secret.word)}</div>
-        ${isImposter ? `<p class="imposter-note">Du bist der Imposter. Finde raus, was die anderen meinen, ohne aufzufliegen.</p>` : ""}
+        <div class="word-eyebrow ${isImposter ? "imposter" : ""}">${isImposter ? (hasHintWord ? "Dein Hinweiswort" : "Kein Hinweiswort") : "Dein Wort"}</div>
+        <div class="the-word">${isImposter && !hasHintWord ? "🤫" : esc(secret.word)}</div>
+        ${isImposter ? `<p class="imposter-note">Du bist der Imposter${hasHintWord ? "" : " und bekommst diese Runde gar kein Wort"}. Finde raus, was die anderen meinen, ohne aufzufliegen.</p>` : ""}
       </div>
       ${app.lobbyData.starterName ? `<p class="hint-text">🎤 ${esc(app.lobbyData.starterName)} fängt an zu fragen</p>` : ""}
       <button class="btn btn-primary" id="to-discussion-btn">Zur Diskussion</button>
@@ -1895,6 +1929,7 @@ function renderRevealScreen(){
       <div class="card">${tallyRows}</div>
       ${whoVotedWhomHtml}
       ${spicySectionHtml()}
+      ${hintWordSectionHtml()}
       <div class="spacer"></div>
       ${app.isHost
         ? `<div class="btn-row">
