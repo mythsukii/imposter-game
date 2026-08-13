@@ -1054,7 +1054,13 @@ async function startRound(btn){
   const originalText = btn ? btn.textContent : "Spiel starten";
   if (btn){ btn.disabled = true; btn.textContent = "Starte Runde …"; }
   try {
-    const pool = app.lobbyData.spicyEnabled ? WORD_PAIRS.concat(SPICY_WORD_PAIRS) : WORD_PAIRS;
+    // With spicy enabled, just merging both lists would drown the ~36 spicy
+    // pairs in the ~238 normal ones (~13% chance) — way too rare for
+    // something someone explicitly opted into. Instead, flip a weighted coin
+    // each round so spicy pairs show up roughly half the time.
+    const SPICY_ROUND_CHANCE = 0.5;
+    const useSpicy = app.lobbyData.spicyEnabled && Math.random() < SPICY_ROUND_CHANCE;
+    const pool = useSpicy ? SPICY_WORD_PAIRS : WORD_PAIRS;
     const pair = pool[Math.floor(Math.random() * pool.length)];
     const flip = Math.random() < 0.5;
     const mainWord = flip ? pair[0] : pair[1];
